@@ -1,7 +1,7 @@
 ﻿"""
-server.py - BOM UAT Automation Dashboard (Flask + SSE)
+server.py - BOM UAT Automation Dashboard (Flask + SSE + Live View + Fast Interrupt)
 """
-import sys, os, json, queue, threading, traceback, time, uuid
+import sys, os, json, queue, threading, traceback, time, uuid, base64
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -27,17 +27,24 @@ _state = {
     "fail":    0,
     "skip":    0,
     "run_id":  None,
+    "latest_ss": None,
 }
-_sse_queues: dict[str, queue.Queue] = {}   # client_id -> Queue
-_sse_lock = threading.Lock()
 
+_active_ctx = None
+_active_page = None
+_ctx_lock = threading.Lock()
+
+_sse_queues: dict[str, queue.Queue] = {}
+_sse_lock = threading.Lock()
 
 def _broadcast(event_type: str, data: dict):
     payload = json.dumps({"type": event_type, "data": data}, ensure_ascii=False)
     with _sse_lock:
-        for q in _sse_queues.values():
-            q.put(payload)
-
+        for q in list(_sse_queues.values()):
+            try:
+                q.put(payload)
+            except Exception:
+                pass
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 @app.route("/")
@@ -73,8 +80,8 @@ def api_run():
     tc_ids     = body.get("tc_ids")  or None
     headless   = body.get("headless", True)
     retry_fail = body.get("retry_failed", False)
+    proof_delay= float(body.get("proof_delay", 1.5)) # Hold proof screenshot delay (seconds)
 
-    # If retry_failed, collect failed TC IDs
     if retry_fail:
         tc_ids = [r["TC ID"] for r in _state["results"] if r.get("Status") == "Failed"]
         if not tc_ids:
@@ -82,18 +89,29 @@ def api_run():
         perm_types = None; roles = None; limit = None
 
     _state.update(running=True, stop=False, results=[], total=0,
-                  done=0, pass_=0, fail=0, skip=0, run_id=str(uuid.uuid4())[:8])
-    _state["pass"] = 0  # reset counters
+                  done=0, pass_=0, fail=0, skip=0, run_id=str(uuid.uuid4())[:8], latest_ss=None)
+    _state["pass"] = 0
+
     threading.Thread(
         target=_run_worker, daemon=True,
-        args=(perm_types, roles, limit, tc_ids, headless)
+        args=(perm_types, roles, limit, tc_ids, headless, proof_delay)
     ).start()
     return jsonify({"status": "started"})
 
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
+    global _active_ctx, _active_page
     _state["stop"] = True
-    return jsonify({"status": "stop_requested"})
+    with _ctx_lock:
+        if _active_ctx:
+            try:
+                _active_ctx.close()
+            except Exception:
+                pass
+            _active_ctx = None
+            _active_page = None
+    _broadcast("run_stopped", {"done": _state["done"]})
+    return jsonify({"status": "stopped_immediately"})
 
 @app.route("/api/results")
 def api_results():
@@ -118,7 +136,7 @@ def api_events():
             yield f"data: {json.dumps({'type': 'connected', 'data': {'client_id': client_id}})}\n\n"
             while True:
                 try:
-                    payload = q.get(timeout=25)
+                    payload = q.get(timeout=20)
                     yield f"data: {payload}\n\n"
                 except queue.Empty:
                     yield ": ping\n\n"
@@ -129,9 +147,20 @@ def api_events():
     return Response(stream(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+# ── Live screenshot capture helper ───────────────────────────────────────────
+def _capture_live_frame(page, tc_id, label="live"):
+    if not page:
+        return
+    try:
+        ss_bytes = page.screenshot(type="jpeg", quality=60)
+        b64 = base64.b64encode(ss_bytes).decode("utf-8")
+        _broadcast("live_frame", {"tc_id": tc_id, "label": label, "image": f"data:image/jpeg;base64,{b64}"})
+    except Exception:
+        pass
 
 # ── Worker ────────────────────────────────────────────────────────────────────
-def _run_worker(perm_types, roles, limit, tc_ids, headless):
+def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
+    global _active_ctx, _active_page
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
     os.makedirs(REPORT_DIR, exist_ok=True)
     try:
@@ -146,14 +175,12 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless):
 
         results = []
         cur_role = None
-        ctx = page_obj = None
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=headless)
 
             for _, row in df.iterrows():
                 if _state["stop"]:
-                    _broadcast("run_stopped", {"done": _state["done"]})
                     break
 
                 tc_id    = row["TC ID"]
@@ -174,18 +201,23 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless):
                                         "function": func, "type": ptype,
                                         "step": step, "expected": expected})
 
-                if role != cur_role:
-                    if ctx:
-                        try: ctx.close()
-                        except: pass
+                # Handle login if role changed
+                if role != cur_role or _active_ctx is None:
+                    with _ctx_lock:
+                        if _active_ctx:
+                            try: _active_ctx.close()
+                            except: pass
                     try:
                         ctx, page_obj = login(browser, role)
+                        with _ctx_lock:
+                            _active_ctx = ctx
+                            _active_page = page_obj
                         cur_role = role
-                        _broadcast("login_ok", {"tc_id": tc_id, "role": role,
-                                                "url": page_obj.url[:100]})
+                        _broadcast("login_ok", {"tc_id": tc_id, "role": role, "url": page_obj.url[:100]})
+                        _capture_live_frame(page_obj, tc_id, label=f"Logged in as {role}")
                     except Exception as e:
-                        _broadcast("tc_done", {"tc_id": tc_id, "status": "Failed",
-                                               "comment": f"Login: {e}"})
+                        if _state["stop"]: break
+                        _broadcast("tc_done", {"tc_id": tc_id, "status": "Failed", "comment": f"Login: {e}"})
                         results.append({**row.to_dict(), "Status": "Failed",
                                         "Comments": str(e)[:100], "Screenshot": ""})
                         _state["done"] += 1; _state["fail"] += 1
@@ -197,22 +229,41 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless):
 
                 t0 = time.time()
                 status = comment = ""
+
+                # Live update frame before verification
+                _capture_live_frame(_active_page, tc_id, label="Testing...")
+
                 try:
+                    if _state["stop"]: break
                     status, comment = run_verification(
-                        page_obj, ptype, app_name, func, expected, role)
+                        _active_page, ptype, app_name, func, expected, role)
                 except Exception as e:
+                    if _state["stop"]: break
                     status  = "Failed"
                     comment = f"Error: {traceback.format_exc()[:200]}"
 
                 elapsed = round(time.time() - t0, 1)
 
-                try: page_obj.screenshot(path=ss_path)
-                except: ss_name = ""
+                # Capture final proof screenshot
+                try:
+                    if _active_page:
+                        _active_page.screenshot(path=ss_path)
+                        _capture_live_frame(_active_page, tc_id, label=f"PROOF [{status}]")
+                except:
+                    ss_name = ""
 
+                # Proof freeze delay for user to inspect live picture
+                if proof_delay > 0 and not _state["stop"]:
+                    time.sleep(proof_delay)
+
+                if _state["stop"]: break
+
+                # Reset to dashboard
                 try:
                     from config import DASHBOARD_URL
-                    page_obj.goto(DASHBOARD_URL, wait_until="domcontentloaded")
-                    page_obj.wait_for_timeout(600)
+                    if _active_page:
+                        _active_page.goto(DASHBOARD_URL, wait_until="domcontentloaded")
+                        _active_page.wait_for_timeout(400)
                 except: pass
 
                 if   status == "Passed":  _state["pass"] += 1
@@ -220,6 +271,7 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless):
                 else:                     _state["skip"] += 1
 
                 _state["done"] += 1
+                _state["latest_ss"] = ss_name
                 result_row = {**row.to_dict(), "Status": status,
                               "Comments": comment, "Screenshot": ss_name,
                               "Elapsed": f"{elapsed}s", "App": app_name}
@@ -234,20 +286,31 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless):
                     "skip": _state["skip"], "screenshot": ss_name,
                 })
 
-            if ctx:
-                try: ctx.close()
-                except: pass
+            with _ctx_lock:
+                if _active_ctx:
+                    try: _active_ctx.close()
+                    except: pass
+                _active_ctx = None
+                _active_page = None
+
             browser.close()
 
         if results:
             save_report(results)
             _broadcast("report_ready", {"pass": _state["pass"], "fail": _state["fail"]})
-        _broadcast("run_complete", {"done": _state["done"], "total": total,
-                                    "pass": _state["pass"], "fail": _state["fail"]})
+        
+        if _state["stop"]:
+            _broadcast("run_stopped", {"done": _state["done"]})
+        else:
+            _broadcast("run_complete", {"done": _state["done"], "total": total,
+                                        "pass": _state["pass"], "fail": _state["fail"]})
     except Exception as e:
         _broadcast("run_error", {"error": traceback.format_exc()[:500]})
     finally:
         _state["running"] = False
+        with _ctx_lock:
+            _active_ctx = None
+            _active_page = None
 
 
 if __name__ == "__main__":

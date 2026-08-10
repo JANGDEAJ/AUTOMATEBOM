@@ -1,4 +1,4 @@
-/* app.js — BOM UAT Dashboard v2 */
+﻿/* app.js — BOM UAT Dashboard v3 (Fast Stop + Live Stream Monitor) */
 'use strict';
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -6,7 +6,8 @@ const S = {
   rows: [], sorted: [], sortKey: null, sortAsc: true,
   running: false, pass: 0, fail: 0, skip: 0, total: 0, done: 0,
   startTime: null, timerHandle: null,
-  tcDetail: {},   // tc_id+role+type -> full event data
+  tcDetail: {},
+  showMonitor: true,
 };
 
 // ── SSE connection ─────────────────────────────────────────────────────────────
@@ -32,11 +33,13 @@ function onEvent({ type, data }) {
       setRunUI(true); showStatsBar(true);
       showProgress(true); updateProgress(0, data.total);
       startTimer();
+      updateMonitorBadge('RUNNING...', 'Testing in progress');
       log(`▶ Run started — ${data.total} test cases`, 'info');
       break;
 
     case 'login_ok':
       log(`  ↳ Login OK [${data.role}] → ${data.url}`, 'muted');
+      updateMonitorMeta(data.tc_id, 'LOGGING IN', `Role: ${data.role}`);
       break;
 
     case 'tc_start':
@@ -46,6 +49,7 @@ function onEvent({ type, data }) {
         Status: 'Running', Comments: '', App: '', Elapsed: '', Screenshot: '',
         _step: data.step, _expected: data.expected });
       log(`  ▷ [${data.tc_id}] ${data.type} | ${data.role}`, 'muted');
+      updateMonitorMeta(data.tc_id, 'RUNNING', `${data.type} (${data.role})`);
       break;
 
     case 'tc_done': {
@@ -60,7 +64,6 @@ function onEvent({ type, data }) {
       updateStatsPills(data.done, data.pass, data.fail, data.skip);
       updateRetryBtn(data.fail);
 
-      // Merge extra info into tcDetail
       const key = `${data.tc_id}||${data.role}||${data.type}`;
       S.tcDetail[key] = { ...(S.tcDetail[key] || {}), ...data };
 
@@ -69,6 +72,18 @@ function onEvent({ type, data }) {
         Status: data.status, Comments: data.comment,
         App: data.app || '', Elapsed: data.elapsed ? `${data.elapsed}s` : '',
         Screenshot: data.screenshot || '' });
+
+      updateMonitorMeta(data.tc_id, data.status, `Finished in ${data.elapsed}s`);
+      break;
+    }
+
+    case 'live_frame': {
+      if (data.image) {
+        document.getElementById('live-monitor-img').src = data.image;
+      }
+      if (data.label) {
+        updateMonitorBadge(data.label, data.tc_id);
+      }
       break;
     }
 
@@ -76,23 +91,52 @@ function onEvent({ type, data }) {
       log(`✔ Run complete — ${data.done}/${data.total} | Pass: ${data.pass} Fail: ${data.fail}`, 'ok');
       S.running = false; setRunUI(false); stopTimer();
       updateRetryBtn(data.fail);
+      updateMonitorBadge('COMPLETED', 'All tests done');
       buildSummary();
       break;
 
     case 'run_stopped':
-      log(`⏹ Stopped by user`, 'warn');
+      log(`⏹ Stopped immediately by user`, 'warn');
       S.running = false; setRunUI(false); stopTimer();
+      updateMonitorBadge('STOPPED', 'Run interrupted');
       break;
 
     case 'run_error':
       log(`✗ Error: ${data.error}`, 'fail');
       S.running = false; setRunUI(false); stopTimer();
+      updateMonitorBadge('ERROR', 'Execution failed');
       break;
 
     case 'report_ready':
       log(`📄 Report saved`, 'ok');
       break;
   }
+}
+
+// ── Live Monitor Controls ──────────────────────────────────────────────────────
+function toggleLiveMonitor() {
+  S.showMonitor = !S.showMonitor;
+  const p = document.getElementById('live-monitor-panel');
+  if (p) p.style.display = S.showMonitor ? 'flex' : 'none';
+}
+
+function changeMonitorSize(size) {
+  const p = document.getElementById('live-monitor-panel');
+  if (!p) return;
+  p.classList.remove('sz-small', 'sz-large');
+  if (size === 'small') p.classList.add('sz-small');
+  if (size === 'large') p.classList.add('sz-large');
+}
+
+function updateMonitorBadge(badgeText, infoText="") {
+  const b = document.getElementById('monitor-badge');
+  if (b) b.textContent = `${badgeText} ${infoText ? '· ' + infoText : ''}`;
+}
+
+function updateMonitorMeta(tcId, status, action) {
+  document.getElementById('mon-tc-id').textContent = tcId || '–';
+  document.getElementById('mon-status').textContent = status || '–';
+  document.getElementById('mon-action').textContent = action || '–';
 }
 
 // ── Logging ────────────────────────────────────────────────────────────────────
@@ -269,30 +313,36 @@ async function startRun() {
   if (!types.length || !roles.length) {
     alert('Select at least one type and one role.'); return;
   }
-  const limit   = parseInt(document.getElementById('inp-limit').value) || null;
-  const headless= document.getElementById('inp-mode').value === '1';
-  const tcRaw   = document.getElementById('inp-tc-filter').value.trim();
-  const tc_ids  = tcRaw ? tcRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
+  const limit       = parseInt(document.getElementById('inp-limit').value) || null;
+  const headless    = document.getElementById('inp-mode').value === '1';
+  const proof_delay = parseFloat(document.getElementById('inp-proof-delay').value) || 1.5;
+  const tcRaw       = document.getElementById('inp-tc-filter').value.trim();
+  const tc_ids      = tcRaw ? tcRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
 
   S.rows = []; renderTable(); clearLog();
   const r = await fetch('/api/run', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ types, roles, limit, headless, tc_ids })
+    body: JSON.stringify({ types, roles, limit, headless, tc_ids, proof_delay })
   }).then(r => r.json());
   if (r.error) { alert(r.error); }
 }
 
 async function retryFailed() {
   if (S.running) return;
-  const headless = document.getElementById('inp-mode').value === '1';
+  const headless    = document.getElementById('inp-mode').value === '1';
+  const proof_delay = parseFloat(document.getElementById('inp-proof-delay').value) || 1.5;
   const r = await fetch('/api/run', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ retry_failed: true, headless })
+    body: JSON.stringify({ retry_failed: true, headless, proof_delay })
   }).then(r => r.json());
   if (r.error) alert(r.error);
 }
 
-function stopRun() { fetch('/api/stop', { method: 'POST' }); }
+function stopRun() {
+  log('⏹ Requesting instant stop...', 'warn');
+  updateMonitorBadge('STOPPING...', 'Closing browser session');
+  fetch('/api/stop', { method: 'POST' });
+}
 
 function setRunUI(running) {
   S.running = running;
@@ -389,7 +439,6 @@ async function buildSummary() {
   const skip  = rows.filter(r => r.Status === 'Skipped').length;
   const rate  = total ? Math.round(pass / total * 100) : 0;
 
-  // Group by role and by permission type
   const byRole = groupBy(rows, 'Role');
   const byType = groupBy(rows, 'Permission Type');
 
@@ -460,21 +509,18 @@ function buildConfigPanel() {
   const grid = document.getElementById('config-grid');
   grid.innerHTML = '';
 
-  // Site card
   const site = card('Site & Database', `
     <div class="cfg-row"><label>Site URL</label><input id="c-site-url" value="${cfg.site.url}"/></div>
     <div class="cfg-row"><label>Database</label><input id="c-site-db" value="${cfg.site.db}"/></div>
   `);
   grid.appendChild(site);
 
-  // IDM card
   const idm = card('IDM Credentials', `
     <div class="cfg-row"><label>Username</label><input id="c-idm-u" value="${cfg.idm.username}"/></div>
     <div class="cfg-row"><label>Password</label><input id="c-idm-p" type="password" value="${cfg.idm.password}"/></div>
   `);
   grid.appendChild(idm);
 
-  // Role cards
   Object.entries(cfg.credentials).forEach(([role, cred]) => {
     const rid = role.replace(/[^a-z0-9]/gi,'_');
     grid.appendChild(card(role, `
@@ -483,7 +529,6 @@ function buildConfigPanel() {
     `));
   });
 
-  // Aliases JSON
   document.getElementById('cfg-aliases').value = JSON.stringify(cfg.aliases, null, 2);
 }
 
@@ -510,7 +555,6 @@ function saveConfig() {
   try { cfg.aliases = JSON.parse(document.getElementById('cfg-aliases').value); } catch {}
   localStorage.setItem(CFG_KEY, JSON.stringify(cfg));
 
-  // Flash the save button
   const btn = document.querySelector('[onclick="saveConfig()"]');
   const orig = btn.textContent;
   btn.textContent = '✓ Saved!';
@@ -529,14 +573,12 @@ function showPanel(id, btn) {
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Chip toggle
   document.querySelectorAll('.chip').forEach(c =>
     c.addEventListener('click', () => c.classList.toggle('active')));
 
   connectSSE();
   log('Dashboard ready — configure filters and click Run Selected.', 'muted');
 
-  // Load state from server (resume after page refresh)
   fetch('/api/state').then(r => r.json()).then(d => {
     if (d.results?.length) {
       S.rows = d.results.map(r => ({

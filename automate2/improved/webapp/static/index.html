@@ -51,7 +51,7 @@
   </div>
 
   <div class="run-control-btns" id="ctrl-btns" style="display:none">
-    <button class="btn-stop-sm" onclick="stopRun()">&#9632; Stop</button>
+    <button class="btn-stop-sm" onclick="stopRun()">&#9632; Instant Stop</button>
   </div>
 
   <div class="sidebar-footer">
@@ -71,125 +71,165 @@
       </div>
       <div class="top-actions">
         <button class="btn-ghost" onclick="previewTests()">&#128065; Preview</button>
+        <button class="btn-ghost" id="btn-toggle-monitor" onclick="toggleLiveMonitor()">&#128187; Toggle Live View</button>
         <button class="btn-ghost" id="btn-retry" onclick="retryFailed()" style="display:none;color:var(--yellow)">&#8635; Retry Failed</button>
         <button class="btn-primary" id="btn-run" onclick="startRun()">&#9654; Run Selected</button>
-        <button class="btn-danger" id="btn-stop" onclick="stopRun()" style="display:none">&#9632; Stop</button>
+        <button class="btn-danger" id="btn-stop" onclick="stopRun()" style="display:none">&#9632; Instant Stop</button>
       </div>
     </div>
 
-    <!-- Filter card -->
-    <div class="card filters-card">
-      <div class="card-section">
-        <div class="flt-label">Permission Types</div>
-        <div class="chip-row" id="chip-types">
-          <div class="chip active" data-val="Read">Read</div>
-          <div class="chip active" data-val="Create">Create</div>
-          <div class="chip active" data-val="Validate (approve/reject)">Validate</div>
-          <div class="chip active" data-val="Setting (set approver/master)">Setting</div>
+    <div class="run-grid-layout" id="run-grid-layout">
+      <div class="run-main-col">
+        <!-- Filter card -->
+        <div class="card filters-card">
+          <div class="card-section">
+            <div class="flt-label">Permission Types</div>
+            <div class="chip-row" id="chip-types">
+              <div class="chip active" data-val="Read">Read</div>
+              <div class="chip active" data-val="Create">Create</div>
+              <div class="chip active" data-val="Validate (approve/reject)">Validate</div>
+              <div class="chip active" data-val="Setting (set approver/master)">Setting</div>
+            </div>
+          </div>
+          <div class="card-section">
+            <div class="flt-label">Roles</div>
+            <div class="chip-row" id="chip-roles">
+              <div class="chip active" data-val="Super Admin">Super Admin</div>
+              <div class="chip active" data-val="Admin">Admin</div>
+              <div class="chip active" data-val="Supervisor">Supervisor</div>
+              <div class="chip active" data-val="Super User">Super User</div>
+              <div class="chip active" data-val="User(Cashier)">Cashier</div>
+              <div class="chip active" data-val="Outsource">Outsource</div>
+            </div>
+          </div>
+          <div class="card-section card-row-inline">
+            <div class="flt-field">
+              <div class="flt-label">Limit</div>
+              <input id="inp-limit" class="inp" type="number" placeholder="All" min="1" style="width:70px"/>
+            </div>
+            <div class="flt-field">
+              <div class="flt-label">Browser Mode</div>
+              <select id="inp-mode" class="inp">
+                <option value="1">Headless (fast)</option>
+                <option value="0">Headed (visible)</option>
+              </select>
+            </div>
+            <div class="flt-field">
+              <div class="flt-label">Proof Freeze Delay</div>
+              <select id="inp-proof-delay" class="inp">
+                <option value="0">0s (Fastest)</option>
+                <option value="1.5" selected>1.5s (Standard Proof)</option>
+                <option value="3">3s (Inspection)</option>
+                <option value="5">5s (Presenter)</option>
+              </select>
+            </div>
+            <div class="flt-field" style="flex:1">
+              <div class="flt-label">TC IDs</div>
+              <input id="inp-tc-filter" class="inp" type="text" placeholder="TC-265, TC-266 …"/>
+            </div>
+            <div class="flt-field">
+              <div class="flt-label">Quick Select</div>
+              <button class="btn-ghost btn-sm" onclick="toggleAllChips('chip-types',true);toggleAllChips('chip-roles',true)">All</button>
+              <button class="btn-ghost btn-sm" onclick="toggleAllChips('chip-types',false);toggleAllChips('chip-roles',false)">None</button>
+            </div>
+          </div>
         </div>
-      </div>
-      <div class="card-section">
-        <div class="flt-label">Roles</div>
-        <div class="chip-row" id="chip-roles">
-          <div class="chip active" data-val="Super Admin">Super Admin</div>
-          <div class="chip active" data-val="Admin">Admin</div>
-          <div class="chip active" data-val="Supervisor">Supervisor</div>
-          <div class="chip active" data-val="Super User">Super User</div>
-          <div class="chip active" data-val="User(Cashier)">Cashier</div>
-          <div class="chip active" data-val="Outsource">Outsource</div>
-        </div>
-      </div>
-      <div class="card-section card-row-inline">
-        <div class="flt-field">
-          <div class="flt-label">Limit</div>
-          <input id="inp-limit" class="inp" type="number" placeholder="All" min="1" style="width:80px"/>
-        </div>
-        <div class="flt-field">
-          <div class="flt-label">Browser Mode</div>
-          <select id="inp-mode" class="inp">
-            <option value="1">Headless (fast)</option>
-            <option value="0">Headed (visible)</option>
-          </select>
-        </div>
-        <div class="flt-field" style="flex:1">
-          <div class="flt-label">TC IDs (comma-separated)</div>
-          <input id="inp-tc-filter" class="inp" type="text" placeholder="TC-265, TC-266 …"/>
-        </div>
-        <div class="flt-field">
-          <div class="flt-label">Select All</div>
-          <button class="btn-ghost btn-sm" onclick="toggleAllChips('chip-types',true);toggleAllChips('chip-roles',true)">All</button>
-          <button class="btn-ghost btn-sm" onclick="toggleAllChips('chip-types',false);toggleAllChips('chip-roles',false)">None</button>
-        </div>
-      </div>
-    </div>
 
-    <!-- Stats bar -->
-    <div class="stats-bar" id="stats-bar" style="display:none">
-      <div class="stat-pill total" id="pill-total">0 Total</div>
-      <div class="stat-pill pass"  id="pill-pass">0 Passed</div>
-      <div class="stat-pill fail"  id="pill-fail">0 Failed</div>
-      <div class="stat-pill skip"  id="pill-skip">0 Skipped</div>
-      <div class="stat-pill rate"  id="pill-rate">0% Pass Rate</div>
-      <div class="stat-pill time"  id="pill-time"></div>
-    </div>
+        <!-- Stats bar -->
+        <div class="stats-bar" id="stats-bar" style="display:none">
+          <div class="stat-pill total" id="pill-total">0 Total</div>
+          <div class="stat-pill pass"  id="pill-pass">0 Passed</div>
+          <div class="stat-pill fail"  id="pill-fail">0 Failed</div>
+          <div class="stat-pill skip"  id="pill-skip">0 Skipped</div>
+          <div class="stat-pill rate"  id="pill-rate">0% Pass Rate</div>
+          <div class="stat-pill time"  id="pill-time"></div>
+        </div>
 
-    <!-- Live log -->
-    <div class="section-hdr">
-      <span>Live Log</span>
-      <div class="hdr-actions">
-        <button class="btn-ghost btn-sm" onclick="clearLog()">Clear log</button>
-        <label class="toggle-wrap"><input type="checkbox" id="chk-autoscroll" checked/><span>Auto-scroll</span></label>
-      </div>
-    </div>
-    <div id="live-log" class="live-log"></div>
+        <!-- Live log -->
+        <div class="section-hdr">
+          <span>Live Log</span>
+          <div class="hdr-actions">
+            <button class="btn-ghost btn-sm" onclick="clearLog()">Clear log</button>
+            <label class="toggle-wrap"><input type="checkbox" id="chk-autoscroll" checked/><span>Auto-scroll</span></label>
+          </div>
+        </div>
+        <div id="live-log" class="live-log"></div>
 
-    <!-- Table header -->
-    <div class="section-hdr" style="margin-top:20px">
-      <span>Test Cases <span class="badge-count" id="tbl-count"></span></span>
-      <div class="hdr-actions">
-        <select id="filter-status" class="inp inp-xs" onchange="renderTable()">
-          <option value="">All Status</option>
-          <option value="Passed">Passed</option>
-          <option value="Failed">Failed</option>
-          <option value="Running">Running</option>
-          <option value="Skipped">Skipped</option>
-        </select>
-        <select id="filter-role" class="inp inp-xs" onchange="renderTable()">
-          <option value="">All Roles</option>
-          <option>Super Admin</option><option>Admin</option><option>Supervisor</option>
-          <option>Super User</option><option>User(Cashier)</option><option>Outsource</option>
-        </select>
-        <select id="filter-type" class="inp inp-xs" onchange="renderTable()">
-          <option value="">All Types</option>
-          <option>Read</option><option>Create</option>
-          <option value="Validate (approve/reject)">Validate</option>
-          <option value="Setting (set approver/master)">Setting</option>
-        </select>
-        <input id="tbl-search" class="inp inp-xs" placeholder="Search…" oninput="renderTable()"/>
-        <button class="btn-ghost btn-sm" onclick="clearResults()">Clear</button>
+        <!-- Table header -->
+        <div class="section-hdr" style="margin-top:16px">
+          <span>Test Cases <span class="badge-count" id="tbl-count"></span></span>
+          <div class="hdr-actions">
+            <select id="filter-status" class="inp inp-xs" onchange="renderTable()">
+              <option value="">All Status</option>
+              <option value="Passed">Passed</option>
+              <option value="Failed">Failed</option>
+              <option value="Running">Running</option>
+              <option value="Skipped">Skipped</option>
+            </select>
+            <select id="filter-role" class="inp inp-xs" onchange="renderTable()">
+              <option value="">All Roles</option>
+              <option>Super Admin</option><option>Admin</option><option>Supervisor</option>
+              <option>Super User</option><option>User(Cashier)</option><option>Outsource</option>
+            </select>
+            <select id="filter-type" class="inp inp-xs" onchange="renderTable()">
+              <option value="">All Types</option>
+              <option>Read</option><option>Create</option>
+              <option value="Validate (approve/reject)">Validate</option>
+              <option value="Setting (set approver/master)">Setting</option>
+            </select>
+            <input id="tbl-search" class="inp inp-xs" placeholder="Search…" oninput="renderTable()"/>
+            <button class="btn-ghost btn-sm" onclick="clearResults()">Clear</button>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table id="tbl-main">
+            <thead>
+              <tr>
+                <th width="90" onclick="sortTable('TC ID')">TC ID &#8645;</th>
+                <th onclick="sortTable('Role')">Role &#8645;</th>
+                <th onclick="sortTable('Permission Type')">Type &#8645;</th>
+                <th>App</th>
+                <th>Function</th>
+                <th onclick="sortTable('Status')">Status &#8645;</th>
+                <th>Comment</th>
+                <th width="60">Time</th>
+                <th width="40">SS</th>
+              </tr>
+            </thead>
+            <tbody id="tbl-body"></tbody>
+          </table>
+        </div>
+        <div class="tbl-footer">
+          <button class="btn-ghost btn-sm" onclick="exportCSV()">&#128229; Export CSV</button>
+          <button class="btn-primary btn-sm" onclick="downloadReport()">&#128196; Download Excel</button>
+        </div>
       </div>
-    </div>
-    <div class="tbl-wrap">
-      <table id="tbl-main">
-        <thead>
-          <tr>
-            <th width="90" onclick="sortTable('TC ID')">TC ID &#8645;</th>
-            <th onclick="sortTable('Role')">Role &#8645;</th>
-            <th onclick="sortTable('Permission Type')">Type &#8645;</th>
-            <th>App</th>
-            <th>Function</th>
-            <th onclick="sortTable('Status')">Status &#8645;</th>
-            <th>Comment</th>
-            <th width="60">Time</th>
-            <th width="40">SS</th>
-          </tr>
-        </thead>
-        <tbody id="tbl-body"></tbody>
-      </table>
-    </div>
-    <div class="tbl-footer">
-      <button class="btn-ghost btn-sm" onclick="exportCSV()">&#128229; Export CSV</button>
-      <button class="btn-primary btn-sm" onclick="downloadReport()">&#128196; Download Excel</button>
+
+      <!-- Live Monitor Side Panel -->
+      <div class="live-monitor-panel" id="live-monitor-panel">
+        <div class="monitor-hdr">
+          <div class="monitor-title">
+            <span class="live-dot pulse-green">●</span> Live Proof Monitor
+          </div>
+          <div class="monitor-actions">
+            <select id="monitor-size" class="inp inp-xs" onchange="changeMonitorSize(this.value)">
+              <option value="medium">Normal Size</option>
+              <option value="large">Large Size</option>
+              <option value="small">Compact</option>
+            </select>
+            <button class="btn-icon" onclick="toggleLiveMonitor()" title="Close monitor">&#10005;</button>
+          </div>
+        </div>
+        <div class="monitor-frame-container">
+          <div class="monitor-overlay-badge" id="monitor-badge">Waiting for test run...</div>
+          <img id="live-monitor-img" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='400' height='250' fill='%23131720'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='13'>Live Browser Screen Stream</text></svg>" alt="Live stream proof"/>
+        </div>
+        <div class="monitor-meta">
+          <div class="meta-item"><span class="meta-lbl">TC ID:</span> <span id="mon-tc-id" class="meta-val">–</span></div>
+          <div class="meta-item"><span class="meta-lbl">Status:</span> <span id="mon-status" class="meta-val">–</span></div>
+          <div class="meta-item"><span class="meta-lbl">Action:</span> <span id="mon-action" class="meta-val">Idle</span></div>
+        </div>
+      </div>
     </div>
   </section>
 
