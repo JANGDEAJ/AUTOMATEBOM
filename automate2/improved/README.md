@@ -1,4 +1,4 @@
-﻿# BOM UAT Automation Framework & Live Dashboard
+# BOM UAT Automation Framework & Live Dashboard
 
 This folder (`improved/`) contains the production-grade, token-optimized Playwright test automation suite and live web monitoring dashboard for **BOM UAT (Accounting & Finance)**.
 
@@ -13,7 +13,7 @@ automate2/
 └── improved/
     ├── README.md                    # System documentation for AI agents & developers
     ├── config.py                    # Credentials, URL parameters, CSS selectors & app aliases
-    ├── loader.py                    # Excel data loader (Test cases & User Matrix mapping)
+    ├── loader.py                    # In-memory Excel data loader & nav matrix cache
     ├── login.py                     # 2-stage IDM + Odoo role authentication helper
     ├── navigator.py                 # App Drawer & navigation switcher helpers
     ├── verifiers.py                 # Per-permission verification engines (Read, Create, Validate, Setting)
@@ -23,16 +23,12 @@ automate2/
     ├── reports/                     # Generated Excel reports (`test_results.xlsx`)
     ├── screenshots/                 # Captured test evidence screenshots
     └── webapp/
-        ├── server.py                # Flask backend with Threading, Instant Interruption & SSE Stream
+        ├── server.py                # Flask backend with Threading, SSE Stream & /api/update_row
         ├── start.bat                # Webapp server launcher
-        ├── static/
-        │   ├── index.html           # Single Page App Dashboard UI
-        │   ├── style.css            # Dark glassmorphism UI styles
-        │   └── app.js               # EventSource (SSE) client, live monitor controller & table state
-        ├── ss_live_monitor.png      # Dashboard preview screenshot
-        ├── ss_run.png
-        ├── ss_config.png
-        └── ss_summary.png
+        └── static/
+            ├── index.html           # Single Page App Dashboard UI
+            ├── style.css            # Dark glassmorphism UI styles
+            └── app.js               # In-memory filter engine, SSE client & Live Excel table
 ```
 
 ---
@@ -54,33 +50,36 @@ Executes 2-stage isolated login:
 
 ### 3. `navigator.py`
 Handles menu navigation:
-- Trigger button: `a.appDrawerToggle` (4-dots icon).
+- Trigger button: `SEL_APP_DRAWER` (supports `a.appDrawerToggle`, `a.o_navbar_apps_menu`, `a[title='Apps']`).
 - Dynamic element detection using `.get_by_text(alias, exact=True)`.
 
 ### 4. `verifiers.py`
 Logic engines for all 4 permission types:
-- **`Read`**: Scans App Drawer for visibility of the target application. PASS if visible when expected, HIDDEN when expected hidden.
+- **`Read`**: Checks if the target application page opens and presents readable content without Access Denied errors.
 - **`Create`**: Navigates to app, checks for presence/absence of creation buttons (e.g. `New`, `Create`, `New Session` for POS).
 - **`Validate`**: Navigates to app, scans for approval action buttons (`Approve`, `Validate`, `Confirm`).
 - **`Setting`**: Scans application configuration headers (`Settings`, `Configuration`).
 
-### 5. `webapp/server.py`
-Flask server providing REST APIs & Server-Sent Events (SSE):
-- **Fast Interruption**: Holds an atomic reference to Playwright's `_active_ctx`. When `/api/stop` is hit, it closes `_active_ctx` immediately, halting ongoing Playwright commands instantly without waiting for timeouts.
+### 5. `webapp/server.py` & `loader.py`
+Flask server providing REST APIs, SSE Streams, and in-memory Excel dataset caching:
+- **In-Memory Cache**: Pre-warms Excel workbooks on server start for 0ms response latency on `/api/testcases`.
+- **Fast Interruption**: Holds an atomic reference to Playwright's `_active_ctx`. When `/api/stop` is hit, it closes `_active_ctx` immediately.
 - **Live Frame Streaming**: Emits `live_frame` base64 snapshots to the Web UI over SSE during test execution.
-- **Proof Freeze Delay**: Holds proof screenshots on screen for a user-configurable duration (`proof_delay`) before clearing context.
+- **In-Place Excel Row Sync**: `/api/update_row` saves cell edits directly into `test_results.xlsx`.
 
 ---
 
 ## 🌐 Web Dashboard Features (`http://localhost:5000`)
 
-1. **Live Proof Monitor**: Side panel displaying live screen frames during execution.
-2. **Instant Stop**: Immediately halts running tests without browser hang.
-3. **Proof Freeze Delay Selector**: Choose hold time (`0s`, `1.5s`, `3s`, `5s`) for visual inspection.
-4. **Interactive Filters**: Toggle chips for Permission Types & Roles, set TC limits, or specify comma-separated TC IDs.
-5. **Retry Failed Button**: Re-runs only failed test cases from previous execution.
-6. **Detailed TC Modal**: Click any TC ID in the table to inspect step-by-step instructions, expected results, and screenshots.
-7. **Report Exporting**: Export filtered view as CSV or download full formatted Excel reports.
+1. **Live Synced Excel Table**: In-place cell editing for Function, Status, and Comments synced 2-way with `test_results.xlsx`.
+2. **Two Separate Excel Options**:
+   - **`Save & Sync Current`**: Persists in-memory edits directly to `test_results.xlsx` on the server in place without browser file download.
+   - **`Download Excel File`**: Downloads the `.xlsx` report file to local storage.
+3. **Sequential Auto-Next Execution**: Setting `Limit = 1` and clicking **Run Selected** automatically targets the next pending/untested test case (`TC-265`, then `TC-269`, etc.).
+4. **Live Breakdown Status Graph**: Dynamic bar widget showing real-time distribution of Passed, Failed, Queued Target, and Matched cases.
+5. **Continuous Live Proof Monitor**: Real-time browser frame streaming with Fullscreen 1200px popout modal.
+6. **Latest-First Proof Feed**: Prepends freshly captured proof screenshots to the top of the Recent Proofs feed.
+7. **Preset Shortcuts**: Quick presets (`Run All`, `Test Read`, `Test Create`, `Test Validate`, `Test Setting`) with instant matched case count context.
 
 ---
 
@@ -89,16 +88,16 @@ Flask server providing REST APIs & Server-Sent Events (SSE):
 ### Option A: Web Dashboard (Recommended)
 Double-click `START.bat` in the project root directory, or run:
 ```powershell
-cd c:\Users\gaykn\Downloads\automate2\improved\webapp
+cd c:\Users\gaykn\Downloads\autobom\AUTOMATEBOM\automate2\improved\webapp
 python server.py
 ```
 Open **[http://localhost:5000](http://localhost:5000)** in browser.
 
 ### Option B: CLI Mode
 ```powershell
-cd c:\Users\gaykn\Downloads\automate2\improved
+cd c:\Users\gaykn\Downloads\autobom\AUTOMATEBOM\automate2\improved
 
-# Run all 672 test cases in headless mode
+# Run all test cases in headless mode
 python run.py --headless
 
 # Run Read tests only
@@ -117,5 +116,5 @@ python run.py --tc TC-265 TC-266 TC-267
 
 - **Always maintain UTF-8 encoding**: Explicitly reconfigure `sys.stdout.reconfigure(encoding="utf-8")` when adding print statements.
 - **Avoid networkidle**: Use `domcontentloaded` for Odoo pages due to long-polling WebSockets.
-- **App Drawer anchor**: `a.appDrawerToggle` is the only reliable toggle for Odoo's top application grid.
+- **App Drawer anchor**: Use fallback selector list in `SEL_APP_DRAWER` for Odoo top navbar compatibility.
 - **Role Isolation**: Do not reuse Playwright contexts across different roles. Always close context and create `browser.new_context()`.
