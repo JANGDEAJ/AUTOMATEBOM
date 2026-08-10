@@ -41,26 +41,38 @@ Open **[http://localhost:5000](http://localhost:5000)** in your browser.
 
 ---
 
+## 🔥 Key Features & Workflow
+
+1. **Sequential Queue Auto-Advancement**:
+   - When running with limits (`Limit = 1` or `N`), the queue badges (`#1`, `#2`...) automatically skip completed test cases (`Passed`, `Failed`, `Skipped`) and target the **next pending test cases** in the queue.
+
+2. **Robust Page Read Verification**:
+   - `verify_read` verifies whether application pages display readable content. Any loaded page without `Access Denied` or `Access Error` dialogs evaluates as **Passed**.
+
+3. **Fail-Proof Live Screen Monitor**:
+   - Features a dual SSE stream and direct 300ms HTTP poller (`/api/live_frame`) ensuring continuous, real-time live browser screen updates during execution.
+
+4. **Multi-Location Excel Synchronization**:
+   - Editing table cells (**Function**, **Status**, **Comments**) or clicking **Save & Sync to Current Excel** updates `test_results.xlsx` across all project directories simultaneously:
+     - `automate2/test_results.xlsx`
+     - `automate2/improved/reports/test_results.xlsx`
+     - `AUTOMATEBOM/test_results.xlsx`
+
+5. **Untouched Original Master Plan**:
+   - Master test case template (`BOM_Role_TestCases_Accounting_Finance.xlsx`) remains 100% read-only and untouched.
+
+---
+
 ## 🔧 How to Customize & Tweak Settings
 
-All system parameters can be customized without writing code:
-
-### 1. Tweaking Credentials & Target URLs (`config.py`)
+### 1. Credentials & Target URLs (`config.py`)
 File path: `automate2/improved/config.py`
-- **Target Site URL**: Change `SITE_URL` or `DATABASE_CODE` (`13000`).
-- **IDM Stage 1 Credentials**: Change `IDM_USERNAME` and `IDM_PASSWORD`.
-- **Role Credentials**: Update usernames/passwords for `Super Admin`, `Admin`, `Supervisor`, `Super User`, `User(Cashier)`, `Outsource`.
+- Change `SITE_URL` or `DATABASE_CODE` (`13000`).
+- Update IDM Stage 1 credentials (`cmp.aa`) or role credentials (`Super Admin`, `Admin`, `Supervisor`, `Super User`, `User(Cashier)`, `Outsource`).
 
-### 2. Customizing Test Cases & Functions
+### 2. Master Test Cases
 File path: `automate2/BOM_Role_TestCases_Accounting_Finance.xlsx`
 - Edit test functions, expected results, or permission types directly in the master Excel sheet.
-- Changes are automatically read on server start.
-
-### 3. Editing Results & Syncing to Excel
-- Edit table cells (**Function**, **Status**, **Comments**) directly inside the live web table.
-- Click **Save & Sync to Current Excel** to persist edits directly to:
-  - `automate2/test_results.xlsx`
-  - `automate2/improved/reports/test_results.xlsx`
 
 ---
 

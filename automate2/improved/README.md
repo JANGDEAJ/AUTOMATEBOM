@@ -46,7 +46,7 @@ Central repository for configuration settings:
 Executes 2-stage isolated login:
 - **Stage 1 (IDM SSO)**: Interacts with `#Ecom_User_ID` iframe inside database `13000`.
 - **Stage 2 (Odoo Role Login)**: Fills role-specific `input[name='login']` and `input[name='password']`.
-- **Session Isolation**: Spawns fresh browser context (`browser.new_context()`) per role switch to avoid session leak.
+- **Continuous Live Emitter**: Emits 250ms live stream frames throughout authentication.
 
 ### 3. `navigator.py`
 Handles menu navigation:
@@ -55,31 +55,27 @@ Handles menu navigation:
 
 ### 4. `verifiers.py`
 Logic engines for all 4 permission types:
-- **`Read`**: Checks if the target application page opens and presents readable content without Access Denied errors.
-- **`Create`**: Navigates to app, checks for presence/absence of creation buttons (e.g. `New`, `Create`, `New Session` for POS).
-- **`Validate`**: Navigates to app, scans for approval action buttons (`Approve`, `Validate`, `Confirm`).
-- **`Setting`**: Scans application configuration headers (`Settings`, `Configuration`).
+- **`Read`**: Evaluates any loaded application page displaying content without `Access Denied` / `Access Error` dialogs as **Passed**.
+- **`Create`**: Checks for creation buttons (`New`, `Create`, `New Session`).
+- **`Validate`**: Scans for approval action buttons (`Approve`, `Validate`, `Confirm`).
+- **`Setting`**: Scans configuration headers (`Settings`, `Configuration`).
 
 ### 5. `webapp/server.py` & `loader.py`
-Flask server providing REST APIs, SSE Streams, and in-memory Excel dataset caching:
-- **In-Memory Cache**: Pre-warms Excel workbooks on server start for 0ms response latency on `/api/testcases`.
-- **Fast Interruption**: Holds an atomic reference to Playwright's `_active_ctx`. When `/api/stop` is hit, it closes `_active_ctx` immediately.
-- **Live Frame Streaming**: Emits `live_frame` base64 snapshots to the Web UI over SSE during test execution.
-- **In-Place Excel Row Sync**: `/api/update_row` saves cell edits directly into `test_results.xlsx`.
+Flask server providing REST APIs, SSE Streams, direct HTTP live frame poller, and in-memory Excel dataset caching:
+- **`_safe_str()` Scalar Sanitizer**: Sanitizes all row values into scalar strings, eliminating pandas Series unhashable type errors.
+- **Fail-Proof HTTP Poller (`/api/live_frame`)**: Direct HTTP endpoint providing 300ms live stream fallback.
+- **In-Place Excel Row Sync**: `/api/update_row` saves cell edits directly into `test_results.xlsx` across all workspace folders.
 
 ---
 
 ## 🌐 Web Dashboard Features (`http://localhost:5000`)
 
-1. **Live Synced Excel Table**: In-place cell editing for Function, Status, and Comments synced 2-way with `test_results.xlsx`.
-2. **Two Separate Excel Options**:
-   - **`Save & Sync Current`**: Persists in-memory edits directly to `test_results.xlsx` on the server in place without browser file download.
-   - **`Download Excel File`**: Downloads the `.xlsx` report file to local storage.
-3. **Sequential Auto-Next Execution**: Setting `Limit = 1` and clicking **Run Selected** automatically targets the next pending/untested test case (`TC-265`, then `TC-269`, etc.).
+1. **Sequential Queue Auto-Advancement**: Queue badges (`#1`, `#2`...) automatically skip completed cases (`Passed`/`Failed`) and advance to the next pending target.
+2. **Live Synced Excel Table**: In-place cell editing for Function, Status, and Comments synced 2-way with `test_results.xlsx`.
+3. **Two Separate Excel Options**: `Save & Sync Current` (in-place server sync) vs `Download Excel File` (local download).
 4. **Live Breakdown Status Graph**: Dynamic bar widget showing real-time distribution of Passed, Failed, Queued Target, and Matched cases.
 5. **Continuous Live Proof Monitor**: Real-time browser frame streaming with Fullscreen 1200px popout modal.
 6. **Latest-First Proof Feed**: Prepends freshly captured proof screenshots to the top of the Recent Proofs feed.
-7. **Preset Shortcuts**: Quick presets (`Run All`, `Test Read`, `Test Create`, `Test Validate`, `Test Setting`) with instant matched case count context.
 
 ---
 
@@ -109,12 +105,3 @@ python run.py --type Create --role "Super Admin"
 # Run specific TC IDs
 python run.py --tc TC-265 TC-266 TC-267
 ```
-
----
-
-## 💡 Guidance for Future Agents
-
-- **Always maintain UTF-8 encoding**: Explicitly reconfigure `sys.stdout.reconfigure(encoding="utf-8")` when adding print statements.
-- **Avoid networkidle**: Use `domcontentloaded` for Odoo pages due to long-polling WebSockets.
-- **App Drawer anchor**: Use fallback selector list in `SEL_APP_DRAWER` for Odoo top navbar compatibility.
-- **Role Isolation**: Do not reuse Playwright contexts across different roles. Always close context and create `browser.new_context()`.
