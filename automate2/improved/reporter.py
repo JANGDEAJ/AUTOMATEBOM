@@ -1,4 +1,4 @@
-﻿"""
+"""
 reporter.py - Excel + console reporting
 """
 
@@ -9,6 +9,9 @@ from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from datetime import datetime
 from config import REPORT_DIR, REPORT_FILE
+
+ALT_REPORT_FILE_1 = os.path.abspath(os.path.join(REPORT_DIR, "..", "..", "test_results.xlsx"))
+ALT_REPORT_FILE_2 = os.path.abspath(os.path.join(REPORT_DIR, "..", "..", "..", "test_results.xlsx"))
 
 
 # Colour fills
@@ -29,7 +32,7 @@ def _autofit(ws):
 
 
 def save_report(results: list[dict]):
-    """Save results list to Excel with colour-coded Status column."""
+    """Save results list to Excel with colour-coded Status column in all project directories."""
     os.makedirs(REPORT_DIR, exist_ok=True)
     df = pd.DataFrame(results)
 
@@ -108,6 +111,11 @@ def save_report(results: list[dict]):
         ws_sum.column_dimensions[get_column_letter(col[0].column)].width = min(max_len + 4, 50)
 
     wb.save(REPORT_FILE)
+    try: wb.save(ALT_REPORT_FILE_1)
+    except Exception: pass
+    try: wb.save(ALT_REPORT_FILE_2)
+    except Exception: pass
+
     print(f"\n Report saved -> {REPORT_FILE}")
     print(f"   Total: {total}  Passed: {passed}  Failed: {failed}  Skipped: {skipped}")
     return REPORT_FILE
