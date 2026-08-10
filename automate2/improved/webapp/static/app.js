@@ -82,8 +82,12 @@ function onEvent({ type, data }) {
 
       updateMonitorMeta(data.tc_id, data.status, `Finished in ${data.elapsed}s`);
 
+      // Advance queue badges sequentially to next pending cases
+      updateMatchingCount();
+
       // Add to Proof Gallery (Latest on Top) & update monitor display
       if (data.screenshot) {
+
         document.getElementById('live-monitor-img').src = `/screenshots/${data.screenshot}`;
         const fullImg = document.getElementById('modal-live-full-img');
         if (fullImg) fullImg.src = `/screenshots/${data.screenshot}`;
@@ -291,30 +295,40 @@ async function updateMatchingCount() {
 
 
   const oldRows = [...(S.rows || [])];
-  const queuedLimit = limit ? Math.min(limit, totalMatched) : totalMatched;
+  let queueCounter = 0;
 
-  S.rows = matched.map((r, idx) => {
-    const existing = oldRows.find(ex => ex && ex['TC ID'] === r['TC ID'] && ex['Role'] === r['Role']);
+  S.rows = matched.map((r) => {
+    const existing = oldRows.find(ex => ex && ex['TC ID'] === r['TC ID'] && ex['Role'] === r['Role'] && ex['Permission Type'] === r['Permission Type']);
+    const status = existing?.Status || r.Status || '';
+    const isPending = !status || status === 'Pending';
+
+    let qIdx = null;
+    if (isPending && limit && queueCounter < limit) {
+      queueCounter++;
+      qIdx = queueCounter;
+    }
+
     return {
       'TC ID': r['TC ID'] || '',
       'Role': r['Role'] || '',
       'Permission Type': r['Permission Type'] || '',
       'Function': r['Function'] || '',
       'Module': r['Module'] || '',
-      Status: existing?.Status || '',
-      Comments: existing?.Comments || '',
-      App: existing?.App || '',
-      Elapsed: existing?.Elapsed || '',
-      Screenshot: existing?.Screenshot || '',
-      _queuedIndex: idx < queuedLimit ? (idx + 1) : null,
+      Status: status,
+      Comments: existing?.Comments || r.Comments || '',
+      App: existing?.App || r.App || '',
+      Elapsed: existing?.Elapsed || r.Elapsed || '',
+      Screenshot: existing?.Screenshot || r.Screenshot || '',
+      _queuedIndex: qIdx,
       _step: r['ขั้นตอนทดสอบ'] || '',
       _expected: r['ผลที่คาดหวัง'] || ''
     };
   });
 
   renderTable();
-  renderStatusChart(totalMatched, queuedLimit);
+  renderStatusChart(totalMatched, queueCounter);
 }
+
 
 // ── Live Breakdown Graph Widget ────────────────────────────────────────────────
 function renderStatusChart(totalMatched, queuedCount) {
@@ -451,7 +465,15 @@ async function handleCellEdit(key, field, newValue) {
   const row = S.rows.find(r => `${r['TC ID']}||${r['Role']}||${r['Permission Type']}` === key);
   if (row) {
     row[field] = val;
-    renderTable();
+    if (S.allCases) {
+      const c = S.allCases.find(r => `${r['TC ID']}||${r['Role']}||${r['Permission Type']}` === key);
+      if (c) c[field] = val;
+    }
+    if (field === 'Status') {
+      updateMatchingCount();
+    } else {
+      renderTable();
+    }
     log(`[EDIT] ${row['TC ID']} ${field} updated -> "${val.slice(0,30)}"`, 'info');
     try {
       await fetch('/api/update_row', {
@@ -462,6 +484,7 @@ async function handleCellEdit(key, field, newValue) {
     } catch {}
   }
 }
+
 
 function sortTable(key) {
   S.sortAsc = S.sortKey === key ? !S.sortAsc : true;
@@ -540,14 +563,15 @@ async function startRun() {
   const tcRaw       = document.getElementById('inp-tc-filter').value.trim();
   let tc_ids        = tcRaw ? tcRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
 
-  // Auto-pick next pending test cases if limit is set and no explicit TC IDs entered
+  // Auto-pick next queued target test cases matching the #1, #2... badges in the table
   if (!tc_ids && limit && S.rows.length) {
-    const pending = S.rows.filter(r => !r.Status || r.Status === 'Pending' || r.Status === 'Skipped');
-    if (pending.length) {
-      tc_ids = pending.slice(0, limit).map(r => r['TC ID']);
+    const queued = S.rows.filter(r => r._queuedIndex != null);
+    if (queued.length) {
+      tc_ids = queued.map(r => r['TC ID']);
       log(`[QUEUE] Selected next ${tc_ids.length} pending case(s): ${tc_ids.join(', ')}`, 'info');
     }
   }
+
 
   clearLog();
   const r = await fetch('/api/run', {
