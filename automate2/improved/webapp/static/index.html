@@ -1,0 +1,248 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>BOM UAT · Automation Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,400&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body>
+
+<aside id="sidebar">
+  <div class="logo">
+    <div class="logo-icon">BOM</div>
+    <div>
+      <div class="logo-title">UAT Automation</div>
+      <div class="logo-sub">Accounting &amp; Finance</div>
+    </div>
+  </div>
+
+  <nav>
+    <button class="nav-btn active" data-panel="run"     onclick="showPanel('run',this)">&#9654; Run Tests</button>
+    <button class="nav-btn"        data-panel="config"  onclick="showPanel('config',this)">&#9881; Config</button>
+    <button class="nav-btn"        data-panel="results" onclick="showPanel('results',this)">&#128202; Summary</button>
+    <button class="nav-btn"        data-panel="log"     onclick="showPanel('log',this)">&#128203; Full Log</button>
+  </nav>
+
+  <div class="sidebar-stats">
+    <div class="mini-stat">
+      <div class="mini-val" id="sb-total">–</div>
+      <div class="mini-lbl">Total</div>
+    </div>
+    <div class="mini-stat pass">
+      <div class="mini-val" id="sb-pass">–</div>
+      <div class="mini-lbl">Pass</div>
+    </div>
+    <div class="mini-stat fail">
+      <div class="mini-val" id="sb-fail">–</div>
+      <div class="mini-lbl">Fail</div>
+    </div>
+  </div>
+
+  <div class="prog-wrap" id="prog-card" style="display:none">
+    <div class="prog-label">
+      <span>Progress</span>
+      <span id="prog-pct">0%</span>
+    </div>
+    <div class="prog-bar-bg"><div class="prog-bar" id="prog-bar"></div></div>
+    <div class="prog-frac" id="prog-frac">0 / 0</div>
+  </div>
+
+  <div class="run-control-btns" id="ctrl-btns" style="display:none">
+    <button class="btn-stop-sm" onclick="stopRun()">&#9632; Stop</button>
+  </div>
+
+  <div class="sidebar-footer">
+    <div id="conn-dot" class="conn-dot offline"></div>
+    <div id="conn-txt" class="conn-txt">Disconnected</div>
+  </div>
+</aside>
+
+<main id="main">
+
+  <!-- ═══ RUN PANEL ═══ -->
+  <section id="panel-run" class="panel active">
+    <div class="top-bar">
+      <div>
+        <h1>Run Tests</h1>
+        <p class="subtitle">Configure filters and run UAT automation tests</p>
+      </div>
+      <div class="top-actions">
+        <button class="btn-ghost" onclick="previewTests()">&#128065; Preview</button>
+        <button class="btn-ghost" id="btn-retry" onclick="retryFailed()" style="display:none;color:var(--yellow)">&#8635; Retry Failed</button>
+        <button class="btn-primary" id="btn-run" onclick="startRun()">&#9654; Run Selected</button>
+        <button class="btn-danger" id="btn-stop" onclick="stopRun()" style="display:none">&#9632; Stop</button>
+      </div>
+    </div>
+
+    <!-- Filter card -->
+    <div class="card filters-card">
+      <div class="card-section">
+        <div class="flt-label">Permission Types</div>
+        <div class="chip-row" id="chip-types">
+          <div class="chip active" data-val="Read">Read</div>
+          <div class="chip active" data-val="Create">Create</div>
+          <div class="chip active" data-val="Validate (approve/reject)">Validate</div>
+          <div class="chip active" data-val="Setting (set approver/master)">Setting</div>
+        </div>
+      </div>
+      <div class="card-section">
+        <div class="flt-label">Roles</div>
+        <div class="chip-row" id="chip-roles">
+          <div class="chip active" data-val="Super Admin">Super Admin</div>
+          <div class="chip active" data-val="Admin">Admin</div>
+          <div class="chip active" data-val="Supervisor">Supervisor</div>
+          <div class="chip active" data-val="Super User">Super User</div>
+          <div class="chip active" data-val="User(Cashier)">Cashier</div>
+          <div class="chip active" data-val="Outsource">Outsource</div>
+        </div>
+      </div>
+      <div class="card-section card-row-inline">
+        <div class="flt-field">
+          <div class="flt-label">Limit</div>
+          <input id="inp-limit" class="inp" type="number" placeholder="All" min="1" style="width:80px"/>
+        </div>
+        <div class="flt-field">
+          <div class="flt-label">Browser Mode</div>
+          <select id="inp-mode" class="inp">
+            <option value="1">Headless (fast)</option>
+            <option value="0">Headed (visible)</option>
+          </select>
+        </div>
+        <div class="flt-field" style="flex:1">
+          <div class="flt-label">TC IDs (comma-separated)</div>
+          <input id="inp-tc-filter" class="inp" type="text" placeholder="TC-265, TC-266 …"/>
+        </div>
+        <div class="flt-field">
+          <div class="flt-label">Select All</div>
+          <button class="btn-ghost btn-sm" onclick="toggleAllChips('chip-types',true);toggleAllChips('chip-roles',true)">All</button>
+          <button class="btn-ghost btn-sm" onclick="toggleAllChips('chip-types',false);toggleAllChips('chip-roles',false)">None</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar" id="stats-bar" style="display:none">
+      <div class="stat-pill total" id="pill-total">0 Total</div>
+      <div class="stat-pill pass"  id="pill-pass">0 Passed</div>
+      <div class="stat-pill fail"  id="pill-fail">0 Failed</div>
+      <div class="stat-pill skip"  id="pill-skip">0 Skipped</div>
+      <div class="stat-pill rate"  id="pill-rate">0% Pass Rate</div>
+      <div class="stat-pill time"  id="pill-time"></div>
+    </div>
+
+    <!-- Live log -->
+    <div class="section-hdr">
+      <span>Live Log</span>
+      <div class="hdr-actions">
+        <button class="btn-ghost btn-sm" onclick="clearLog()">Clear log</button>
+        <label class="toggle-wrap"><input type="checkbox" id="chk-autoscroll" checked/><span>Auto-scroll</span></label>
+      </div>
+    </div>
+    <div id="live-log" class="live-log"></div>
+
+    <!-- Table header -->
+    <div class="section-hdr" style="margin-top:20px">
+      <span>Test Cases <span class="badge-count" id="tbl-count"></span></span>
+      <div class="hdr-actions">
+        <select id="filter-status" class="inp inp-xs" onchange="renderTable()">
+          <option value="">All Status</option>
+          <option value="Passed">Passed</option>
+          <option value="Failed">Failed</option>
+          <option value="Running">Running</option>
+          <option value="Skipped">Skipped</option>
+        </select>
+        <select id="filter-role" class="inp inp-xs" onchange="renderTable()">
+          <option value="">All Roles</option>
+          <option>Super Admin</option><option>Admin</option><option>Supervisor</option>
+          <option>Super User</option><option>User(Cashier)</option><option>Outsource</option>
+        </select>
+        <select id="filter-type" class="inp inp-xs" onchange="renderTable()">
+          <option value="">All Types</option>
+          <option>Read</option><option>Create</option>
+          <option value="Validate (approve/reject)">Validate</option>
+          <option value="Setting (set approver/master)">Setting</option>
+        </select>
+        <input id="tbl-search" class="inp inp-xs" placeholder="Search…" oninput="renderTable()"/>
+        <button class="btn-ghost btn-sm" onclick="clearResults()">Clear</button>
+      </div>
+    </div>
+    <div class="tbl-wrap">
+      <table id="tbl-main">
+        <thead>
+          <tr>
+            <th width="90" onclick="sortTable('TC ID')">TC ID &#8645;</th>
+            <th onclick="sortTable('Role')">Role &#8645;</th>
+            <th onclick="sortTable('Permission Type')">Type &#8645;</th>
+            <th>App</th>
+            <th>Function</th>
+            <th onclick="sortTable('Status')">Status &#8645;</th>
+            <th>Comment</th>
+            <th width="60">Time</th>
+            <th width="40">SS</th>
+          </tr>
+        </thead>
+        <tbody id="tbl-body"></tbody>
+      </table>
+    </div>
+    <div class="tbl-footer">
+      <button class="btn-ghost btn-sm" onclick="exportCSV()">&#128229; Export CSV</button>
+      <button class="btn-primary btn-sm" onclick="downloadReport()">&#128196; Download Excel</button>
+    </div>
+  </section>
+
+  <!-- ═══ CONFIG PANEL ═══ -->
+  <section id="panel-config" class="panel">
+    <div class="top-bar">
+      <div><h1>Configuration</h1><p class="subtitle">Edit credentials and settings (saved in browser)</p></div>
+      <button class="btn-primary" onclick="saveConfig()">&#128190; Save</button>
+    </div>
+    <div class="config-grid" id="config-grid"></div>
+    <div class="card" style="margin-top:16px;padding:16px">
+      <div class="flt-label">App Button Aliases (JSON)</div>
+      <textarea id="cfg-aliases" class="inp" rows="8" style="width:100%;font-family:monospace;font-size:12px;margin-top:6px"></textarea>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">Edit app name aliases used for App Grid detection. Restart server to apply.</div>
+    </div>
+  </section>
+
+  <!-- ═══ SUMMARY PANEL ═══ -->
+  <section id="panel-results" class="panel">
+    <div class="top-bar">
+      <div><h1>Summary</h1><p class="subtitle">Last run statistics</p></div>
+      <button class="btn-primary btn-sm" onclick="downloadReport()">&#128196; Download Excel</button>
+    </div>
+    <div id="summary-body"></div>
+  </section>
+
+  <!-- ═══ FULL LOG PANEL ═══ -->
+  <section id="panel-log" class="panel">
+    <div class="top-bar">
+      <div><h1>Full Log</h1></div>
+      <button class="btn-ghost btn-sm" onclick="clearLog()">Clear</button>
+    </div>
+    <div id="full-log" class="live-log" style="height:calc(100vh - 160px)"></div>
+  </section>
+
+</main>
+
+<!-- TC Detail Modal -->
+<div id="modal-tc" class="modal-bg" onclick="closeModal('modal-tc')" style="display:none">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="closeModal('modal-tc')">&#10005;</button>
+    <div id="modal-tc-body"></div>
+  </div>
+</div>
+
+<!-- Screenshot Modal -->
+<div id="modal-ss" class="modal-bg" onclick="closeModal('modal-ss')" style="display:none">
+  <div class="modal-box modal-img-box" onclick="event.stopPropagation()">
+    <button class="modal-close" onclick="closeModal('modal-ss')">&#10005;</button>
+    <img id="modal-ss-img" src="" alt="screenshot"/>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
