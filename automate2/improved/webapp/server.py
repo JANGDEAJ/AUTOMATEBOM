@@ -193,16 +193,28 @@ def api_events():
     return Response(stream(), mimetype="text/event-stream",
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+_latest_live_frame = {"image": "", "tc_id": "", "label": "Idle", "ts": 0}
+
+@app.route("/api/live_frame")
+def api_live_frame():
+    return jsonify(_latest_live_frame)
+
 # ── Live screenshot capture helper ───────────────────────────────────────────
 def _capture_live_frame(page, tc_id, label="live"):
     if not page:
         return
     try:
-        ss_bytes = page.screenshot(type="jpeg", quality=60)
+        ss_bytes = page.screenshot(type="jpeg", quality=45, timeout=1000)
         b64 = base64.b64encode(ss_bytes).decode("utf-8")
-        _broadcast("live_frame", {"tc_id": tc_id, "label": label, "image": f"data:image/jpeg;base64,{b64}"})
+        img_url = f"data:image/jpeg;base64,{b64}"
+        _latest_live_frame["image"] = img_url
+        _latest_live_frame["tc_id"] = tc_id
+        _latest_live_frame["label"] = label
+        _latest_live_frame["ts"]    = time.time()
+        _broadcast("live_frame", {"tc_id": tc_id, "label": label, "image": img_url})
     except Exception:
         pass
+
 
 # ── Worker ────────────────────────────────────────────────────────────────────
 def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):

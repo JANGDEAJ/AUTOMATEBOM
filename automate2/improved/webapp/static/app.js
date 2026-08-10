@@ -39,9 +39,11 @@ function onEvent({ type, data }) {
       setRunUI(true); showStatsBar(true);
       showProgress(true); updateProgress(0, data.total);
       startTimer();
+      startLivePoll();
       updateMonitorBadge('RUNNING...', 'Testing in progress');
       log(`[RUN] Started — ${data.total} test cases`, 'info');
       break;
+
 
     case 'login_ok':
       log(`  Login OK [${data.role}] -> ${data.url}`, 'muted');
@@ -141,6 +143,29 @@ function openLiveFullscreen() {
   if (fullImg) fullImg.src = curSrc;
   document.getElementById('modal-live-full').style.display = 'grid';
 }
+
+let _livePollTimer = null;
+function startLivePoll() {
+  if (_livePollTimer) clearInterval(_livePollTimer);
+  _livePollTimer = setInterval(async () => {
+    if (!S.running) return;
+    try {
+      const res = await fetch('/api/live_frame').then(r => r.json());
+      if (res.image) {
+        document.getElementById('live-monitor-img').src = res.image;
+        const fullImg = document.getElementById('modal-live-full-img');
+        if (fullImg) fullImg.src = res.image;
+      }
+      if (res.label) {
+        updateMonitorBadge(res.label, res.tc_id);
+      }
+    } catch {}
+  }, 300);
+}
+function stopLivePoll() {
+  if (_livePollTimer) { clearInterval(_livePollTimer); _livePollTimer = null; }
+}
+
 
 function updateMonitorBadge(badgeText, infoText="") {
   const b = document.getElementById('monitor-badge');
