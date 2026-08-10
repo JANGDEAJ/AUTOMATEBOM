@@ -524,11 +524,12 @@ async function startRun() {
     }
   }
 
-  S.rows = []; renderTable(); clearLog();
+  clearLog();
   const r = await fetch('/api/run', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ types, roles, limit, headless, tc_ids, proof_delay })
   }).then(r => r.json());
+
 
   if (r.error) { alert(r.error); }
 }

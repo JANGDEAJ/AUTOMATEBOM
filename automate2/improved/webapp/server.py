@@ -229,20 +229,21 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
                 if _state["stop"]:
                     break
 
-                tc_id    = row["TC ID"]
-                role     = row["Role"]
-                func     = row["Function"]
-                ptype    = row["Permission Type"]
-                expected = str(row.get("ผลที่คาดหวัง", "")).strip()
-                step     = str(row.get("ขั้นตอนทดสอบ", "")).strip()
+                tc_id    = str(row["TC ID"]).strip() if pd.notna(row["TC ID"]) else ""
+                role     = str(row["Role"]).strip() if pd.notna(row["Role"]) else ""
+                func     = str(row["Function"]).strip() if pd.notna(row["Function"]) else ""
+                ptype    = str(row["Permission Type"]).strip() if pd.notna(row["Permission Type"]) else ""
+                expected = str(row.get("ผลที่คาดหวัง", "")).strip() if pd.notna(row.get("ผลที่คาดหวัง")) else ""
+                step     = str(row.get("ขั้นตอนทดสอบ", "")).strip() if pd.notna(row.get("ขั้นตอนทดสอบ")) else ""
 
-                nav_info = nav.get(func, {})
-                app_name = nav_info.get("app", func)
-                app_name_str = str(app_name if app_name and not (isinstance(app_name, float)) else func or "")
+                nav_info = nav.get(func, {}) if isinstance(nav, dict) else {}
+                app_name = nav_info.get("app", func) if isinstance(nav_info, dict) else func
+                app_name_str = str(app_name or "")
                 for key in ["Point of Sale","Sales","Accounting","Purchase",
                             "Inventory","Request","Fleet","MPOS","Contacts","Settings"]:
                     if key.lower() in app_name_str.lower():
                         app_name = key; break
+
 
 
                 _broadcast("tc_start", {"tc_id": tc_id, "role": role,
