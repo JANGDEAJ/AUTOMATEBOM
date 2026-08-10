@@ -1,8 +1,16 @@
 """
-navigator.py - App Grid navigation helpers with simple audit logging
+navigator.py - App Grid navigation helpers with continuous live streaming
 """
 
+import time
 from config import SEL_APP_DRAWER, APP_ALIASES, DASHBOARD_URL
+
+
+def _live_wait(page, cb, seconds: float, label: str):
+    t_end = time.time() + seconds
+    while time.time() < t_end:
+        cb(label)
+        time.sleep(0.25)
 
 
 def open_app(page, app_name: str, frame_cb=None) -> bool:
@@ -18,14 +26,14 @@ def open_app(page, app_name: str, frame_cb=None) -> bool:
         if DASHBOARD_URL not in page.url:
             cb("Open browser home page")
             page.goto(DASHBOARD_URL, wait_until="domcontentloaded")
-            page.wait_for_timeout(1000)
+            _live_wait(page, cb, 1.0, "Open browser home page")
 
         drawer = page.locator(SEL_APP_DRAWER).first
         if not drawer.is_visible(timeout=5000):
             return False
         cb("Opened App Drawer")
         drawer.click()
-        page.wait_for_timeout(1500)
+        _live_wait(page, cb, 1.5, "Opened App Drawer")
 
         aliases = APP_ALIASES.get(app_name, [app_name])
         for alias in aliases:
@@ -36,7 +44,7 @@ def open_app(page, app_name: str, frame_cb=None) -> bool:
                     try:
                         cb(f"Clicked {alias}")
                         elem.click()
-                        page.wait_for_timeout(1500)
+                        _live_wait(page, cb, 1.5, f"Opening {alias}...")
                         cb(f"Opened {alias}")
                     except Exception:
                         pass
