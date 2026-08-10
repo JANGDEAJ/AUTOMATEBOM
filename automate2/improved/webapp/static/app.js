@@ -1,4 +1,4 @@
-﻿/* app.js — BOM UAT Dashboard v3 (Fast Stop + Live Stream Monitor) */
+/* app.js — BOM UAT Dashboard v5 (Instant In-Memory Filtering + Continuous Live Proof Monitor + Editable Excel Table) */
 'use strict';
 
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -8,6 +8,9 @@ const S = {
   startTime: null, timerHandle: null,
   tcDetail: {},
   showMonitor: true,
+  currentPreset: 'All',
+  proofGallery: [],
+  allCases: null
 };
 
 // ── SSE connection ─────────────────────────────────────────────────────────────
@@ -15,7 +18,10 @@ let _es = null;
 function connectSSE() {
   if (_es) _es.close();
   _es = new EventSource('/api/events');
-  _es.onopen  = () => { setConn(true); };
+  _es.onopen  = () => {
+    setConn(true);
+    updateMatchingCount();
+  };
   _es.onerror = () => { setConn(false); setTimeout(connectSSE, 4000); };
   _es.onmessage = (e) => { try { onEvent(JSON.parse(e.data)); } catch {} };
 }
@@ -34,11 +40,11 @@ function onEvent({ type, data }) {
       showProgress(true); updateProgress(0, data.total);
       startTimer();
       updateMonitorBadge('RUNNING...', 'Testing in progress');
-      log(`▶ Run started — ${data.total} test cases`, 'info');
+      log(`[RUN] Started — ${data.total} test cases`, 'info');
       break;
 
     case 'login_ok':
-      log(`  ↳ Login OK [${data.role}] → ${data.url}`, 'muted');
+      log(`  Login OK [${data.role}] -> ${data.url}`, 'muted');
       updateMonitorMeta(data.tc_id, 'LOGGING IN', `Role: ${data.role}`);
       break;
 
@@ -48,14 +54,13 @@ function onEvent({ type, data }) {
         'Permission Type': data.type, Function: data.function,
         Status: 'Running', Comments: '', App: '', Elapsed: '', Screenshot: '',
         _step: data.step, _expected: data.expected });
-      log(`  ▷ [${data.tc_id}] ${data.type} | ${data.role}`, 'muted');
+      log(`  [START] [${data.tc_id}] ${data.type} | ${data.role}`, 'muted');
       updateMonitorMeta(data.tc_id, 'RUNNING', `${data.type} (${data.role})`);
       break;
 
     case 'tc_done': {
-      const icon = data.status === 'Passed' ? '✓' : (data.status === 'Failed' ? '✗' : '–');
-      const cls  = data.status === 'Passed' ? 'ok' : (data.status === 'Failed' ? 'fail' : 'warn');
-      log(`  ${icon} [${data.tc_id}] ${data.status} (${data.elapsed}s) — ${data.comment}`, cls);
+      const cls = data.status === 'Passed' ? 'ok' : (data.status === 'Failed' ? 'fail' : 'warn');
+      log(`  [${data.status.toUpperCase()}] [${data.tc_id}] (${data.elapsed}s) — ${data.comment}`, cls);
 
       S.pass = data.pass; S.fail = data.fail; S.skip = data.skip;
       S.done = data.done; S.total = data.total;
@@ -74,12 +79,22 @@ function onEvent({ type, data }) {
         Screenshot: data.screenshot || '' });
 
       updateMonitorMeta(data.tc_id, data.status, `Finished in ${data.elapsed}s`);
+
+      // Add to Proof Gallery (Latest on Top) & update monitor display
+      if (data.screenshot) {
+        document.getElementById('live-monitor-img').src = `/screenshots/${data.screenshot}`;
+        const fullImg = document.getElementById('modal-live-full-img');
+        if (fullImg) fullImg.src = `/screenshots/${data.screenshot}`;
+        addProofGalleryItem(data.tc_id, data.status, data.role, data.screenshot, data.elapsed);
+      }
       break;
     }
 
     case 'live_frame': {
       if (data.image) {
         document.getElementById('live-monitor-img').src = data.image;
+        const fullImg = document.getElementById('modal-live-full-img');
+        if (fullImg) fullImg.src = data.image;
       }
       if (data.label) {
         updateMonitorBadge(data.label, data.tc_id);
@@ -88,7 +103,7 @@ function onEvent({ type, data }) {
     }
 
     case 'run_complete':
-      log(`✔ Run complete — ${data.done}/${data.total} | Pass: ${data.pass} Fail: ${data.fail}`, 'ok');
+      log(`[COMPLETE] Run complete — ${data.done}/${data.total} | Pass: ${data.pass} Fail: ${data.fail}`, 'ok');
       S.running = false; setRunUI(false); stopTimer();
       updateRetryBtn(data.fail);
       updateMonitorBadge('COMPLETED', 'All tests done');
@@ -96,47 +111,208 @@ function onEvent({ type, data }) {
       break;
 
     case 'run_stopped':
-      log(`⏹ Stopped immediately by user`, 'warn');
+      log(`[STOP] Stopped immediately by user`, 'warn');
       S.running = false; setRunUI(false); stopTimer();
       updateMonitorBadge('STOPPED', 'Run interrupted');
       break;
 
     case 'run_error':
-      log(`✗ Error: ${data.error}`, 'fail');
+      log(`[ERROR] ${data.error}`, 'fail');
       S.running = false; setRunUI(false); stopTimer();
       updateMonitorBadge('ERROR', 'Execution failed');
       break;
 
     case 'report_ready':
-      log(`📄 Report saved`, 'ok');
+      log(`[REPORT] Report updated & saved`, 'ok');
       break;
   }
 }
 
-// ── Live Monitor Controls ──────────────────────────────────────────────────────
+// ── Live Monitor & Latest-First Proof Gallery ──────────────────────────────────
 function toggleLiveMonitor() {
   S.showMonitor = !S.showMonitor;
   const p = document.getElementById('live-monitor-panel');
   if (p) p.style.display = S.showMonitor ? 'flex' : 'none';
 }
 
-function changeMonitorSize(size) {
-  const p = document.getElementById('live-monitor-panel');
-  if (!p) return;
-  p.classList.remove('sz-small', 'sz-large');
-  if (size === 'small') p.classList.add('sz-small');
-  if (size === 'large') p.classList.add('sz-large');
+function openLiveFullscreen() {
+  const curSrc = document.getElementById('live-monitor-img').src;
+  const fullImg = document.getElementById('modal-live-full-img');
+  if (fullImg) fullImg.src = curSrc;
+  document.getElementById('modal-live-full').style.display = 'grid';
 }
 
 function updateMonitorBadge(badgeText, infoText="") {
   const b = document.getElementById('monitor-badge');
   if (b) b.textContent = `${badgeText} ${infoText ? '· ' + infoText : ''}`;
+  const mb = document.getElementById('modal-live-badge-txt');
+  if (mb) mb.textContent = `${badgeText} ${infoText ? '· ' + infoText : ''}`;
 }
 
 function updateMonitorMeta(tcId, status, action) {
-  document.getElementById('mon-tc-id').textContent = tcId || '–';
-  document.getElementById('mon-status').textContent = status || '–';
-  document.getElementById('mon-action').textContent = action || '–';
+  document.getElementById('mon-tc-id').textContent = tcId || '-';
+  document.getElementById('mon-status').textContent = status || '-';
+  document.getElementById('mon-action').textContent = action || '-';
+}
+
+function addProofGalleryItem(tcId, status, role, screenshotName, elapsed) {
+  const tip = document.getElementById('proof-empty-tip');
+  if (tip) tip.style.display = 'none';
+
+  const gallery = document.getElementById('proofs-gallery');
+  if (!gallery) return;
+
+  const item = document.createElement('div');
+  item.className = 'proof-card';
+  const stClass = status === 'Passed' ? 'b-pass' : status === 'Failed' ? 'b-fail' : 'b-skip';
+
+  item.innerHTML = `
+    <div class="proof-thumb-wrap" onclick="viewSS('${screenshotName}', '${tcId}')">
+      <img src="/screenshots/${screenshotName}" alt="${tcId}" class="proof-thumb"/>
+    </div>
+    <div class="proof-info">
+      <div class="proof-tc" onclick="viewSS('${screenshotName}', '${tcId}')">${tcId}</div>
+      <div class="proof-role">${role}</div>
+      <div class="proof-status"><span class="badge ${stClass}">${status}</span> <span class="proof-time">${elapsed}s</span></div>
+    </div>
+    <button class="btn-ghost btn-xs" onclick="viewSS('${screenshotName}', '${tcId}')">Preview</button>
+  `;
+
+  gallery.insertBefore(item, gallery.firstChild);
+}
+
+// ── Presets & Dynamic Counter & Live Queued Highlighting ───────────────────────
+function selectPreset(preset) {
+  S.currentPreset = preset;
+  document.querySelectorAll('.btn-preset').forEach(b => {
+    b.classList.toggle('active', b.dataset.preset === preset);
+  });
+
+  const typesContainer = document.getElementById('chip-types');
+  const rolesContainer = document.getElementById('chip-roles');
+
+  rolesContainer.querySelectorAll('.chip').forEach(c => c.classList.add('active'));
+
+  if (preset === 'All') {
+    typesContainer.querySelectorAll('.chip').forEach(c => c.classList.add('active'));
+  } else {
+    typesContainer.querySelectorAll('.chip').forEach(c => {
+      const val = c.dataset.val;
+      if (preset === 'Read' && val === 'Read') c.classList.add('active');
+      else if (preset === 'Create' && val === 'Create') c.classList.add('active');
+      else if (preset === 'Validate' && val.includes('Validate')) c.classList.add('active');
+      else if (preset === 'Setting' && val.includes('Setting')) c.classList.add('active');
+      else c.classList.remove('active');
+    });
+  }
+
+  updateMatchingCount();
+}
+
+function toggleAdvancedFilters() {
+  const container = document.getElementById('advanced-filters-container');
+  const btn = document.getElementById('btn-toggle-adv');
+  if (!container) return;
+  const isHidden = container.style.display === 'none';
+  container.style.display = isHidden ? 'block' : 'none';
+  btn.textContent = isHidden ? 'Hide Advanced' : 'Advanced Filters';
+}
+
+async function loadAllTestCases(force = false) {
+  if (S.allCases && S.allCases.length && !force) return S.allCases;
+  try {
+    const res = await fetch('/api/testcases').then(r => r.json());
+    S.allCases = res.rows || [];
+    return S.allCases;
+  } catch (err) {
+    console.error('[LOAD TESTCASES ERROR]', err);
+    return [];
+  }
+}
+
+async function updateMatchingCount() {
+  const badge = document.getElementById('matched-count-badge');
+  if (!badge) return;
+
+  const allRows = await loadAllTestCases();
+
+  const types = getChips('chip-types');
+  const roles = getChips('chip-roles');
+  const limit = parseInt(document.getElementById('inp-limit').value) || null;
+  const tcRaw = document.getElementById('inp-tc-filter').value.trim();
+
+  if (!types.length || !roles.length || !allRows.length) {
+    badge.textContent = 'Matched: 0 cases';
+    badge.className = 'matched-badge matched-zero';
+    S.rows = []; renderTable(); renderStatusChart(0, 0);
+    return;
+  }
+
+  // Instant pure JavaScript filter (<1ms)
+  let matched = allRows.filter(r =>
+    types.includes(r['Permission Type']) && roles.includes(r['Role'])
+  );
+
+  if (tcRaw) {
+    const ids = tcRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (ids.length) {
+      matched = matched.filter(r => ids.some(id => String(r['TC ID']||'').toLowerCase().includes(id)));
+    }
+  }
+
+  const totalMatched = matched.length;
+  badge.textContent = `Matched: ${totalMatched} cases (${roles.length} Role${roles.length > 1 ? 's' : ''})`;
+  badge.className = 'matched-badge';
+
+
+  const oldRows = [...(S.rows || [])];
+  const queuedLimit = limit ? Math.min(limit, totalMatched) : totalMatched;
+
+  S.rows = matched.map((r, idx) => {
+    const existing = oldRows.find(ex => ex && ex['TC ID'] === r['TC ID'] && ex['Role'] === r['Role']);
+    return {
+      'TC ID': r['TC ID'] || '',
+      'Role': r['Role'] || '',
+      'Permission Type': r['Permission Type'] || '',
+      'Function': r['Function'] || '',
+      'Module': r['Module'] || '',
+      Status: existing?.Status || '',
+      Comments: existing?.Comments || '',
+      App: existing?.App || '',
+      Elapsed: existing?.Elapsed || '',
+      Screenshot: existing?.Screenshot || '',
+      _queuedIndex: idx < queuedLimit ? (idx + 1) : null,
+      _step: r['ขั้นตอนทดสอบ'] || '',
+      _expected: r['ผลที่คาดหวัง'] || ''
+    };
+  });
+
+  renderTable();
+  renderStatusChart(totalMatched, queuedLimit);
+}
+
+// ── Live Breakdown Graph Widget ────────────────────────────────────────────────
+function renderStatusChart(totalMatched, queuedCount) {
+  const pass = S.rows.filter(r => r.Status === 'Passed').length;
+  const fail = S.rows.filter(r => r.Status === 'Failed').length;
+  const total = totalMatched || 1;
+
+  const pctPass = Math.round((pass / total) * 100);
+  const pctFail = Math.round((fail / total) * 100);
+  const pctQueued = Math.round((queuedCount / total) * 100);
+  const pctMatched = Math.max(0, 100 - pctPass - pctFail - pctQueued);
+
+  document.getElementById('cbar-pass').style.width = pctPass + '%';
+  document.getElementById('cbar-fail').style.width = pctFail + '%';
+  document.getElementById('cbar-queued').style.width = pctQueued + '%';
+  document.getElementById('cbar-matched').style.width = pctMatched + '%';
+
+  document.getElementById('lg-val-pass').textContent = pass;
+  document.getElementById('lg-val-fail').textContent = fail;
+  document.getElementById('lg-val-queued').textContent = queuedCount;
+  document.getElementById('lg-val-matched').textContent = totalMatched;
+
+  document.getElementById('chart-stats-summary').textContent = `${totalMatched} Matched | ${queuedCount} Queued Target`;
 }
 
 // ── Logging ────────────────────────────────────────────────────────────────────
@@ -169,7 +345,7 @@ function clearLog() {
   });
 }
 
-// ── Table management ───────────────────────────────────────────────────────────
+// ── Live Interactive Excel Table Management ────────────────────────────────────
 function upsertRow(row) {
   const key = `${row['TC ID']}||${row['Role']}||${row['Permission Type']}`;
   const idx = S.rows.findIndex(r =>
@@ -204,39 +380,62 @@ function renderTable() {
   tbody.innerHTML = '';
 
   S.sorted.forEach(row => {
+    const key = `${row['TC ID']}||${row['Role']}||${row['Permission Type']}`;
     const st = row.Status || '';
-    const rc = st === 'Passed' ? 'row-pass' : st === 'Failed' ? 'row-fail' : st === 'Running' ? 'row-run' : 'row-skip';
-    const bd = badge(st);
+    const isQueued = row._queuedIndex != null;
+    const rc = isQueued ? 'row-queued' : (st === 'Passed' ? 'row-pass' : st === 'Failed' ? 'row-fail' : st === 'Running' ? 'row-run' : 'row-skip');
     const ss = row.Screenshot
-      ? `<button class="btn-icon" title="View screenshot" onclick="viewSS('${row.Screenshot}')">🖼</button>` : '';
+      ? `<button class="btn-primary btn-xs" title="Preview screenshot" onclick="viewSS('${row.Screenshot}', '${row['TC ID']}')">Preview</button>` : '';
+
+    const queueBadge = isQueued
+      ? `<span class="badge b-queued" title="Queued target execution #${row._queuedIndex}">#${row._queuedIndex}</span>`
+      : `<span class="badge b-wait">-</span>`;
+
+    const statusSelect = `
+      <select class="inp inp-xs sel-status-editable ${st === 'Passed' ? 'st-pass' : st === 'Failed' ? 'st-fail' : ''}" onchange="handleCellEdit('${key}', 'Status', this.value)" title="Click to edit status">
+        <option value="" ${!st ? 'selected' : ''}>Pending</option>
+        <option value="Passed" ${st==='Passed' ? 'selected' : ''}>Passed</option>
+        <option value="Failed" ${st==='Failed' ? 'selected' : ''}>Failed</option>
+        <option value="Skipped" ${st==='Skipped' ? 'selected' : ''}>Skipped</option>
+        <option value="Running" ${st==='Running' ? 'selected' : ''}>Running</option>
+      </select>`;
+
     const tr = document.createElement('tr');
     tr.className = rc;
-    const key = `${row['TC ID']}||${row['Role']}||${row['Permission Type']}`;
     tr.innerHTML = `
+      <td>${queueBadge}</td>
       <td><span class="cell-tc" onclick="openDetail('${key}')" title="Click for details">${row['TC ID']||''}</span></td>
       <td><span class="badge b-role">${row.Role||''}</span></td>
       <td><span class="badge b-type">${row['Permission Type']||''}</span></td>
       <td style="font-size:11px;color:var(--muted2)">${row.App||''}</td>
-      <td class="cell-fn" title="${row.Function||''}">${row.Function||''}</td>
-      <td>${bd}</td>
-      <td class="cell-cmt">${row.Comments||''}</td>
+      <td class="cell-editable" contenteditable="true" onblur="handleCellEdit('${key}', 'Function', this.innerText)" title="Click to edit Function">${row.Function||''}</td>
+      <td>${statusSelect}</td>
+      <td class="cell-editable cell-cmt" contenteditable="true" onblur="handleCellEdit('${key}', 'Comments', this.innerText)" title="Click to edit Comment">${row.Comments||''}</td>
       <td class="cell-time">${row.Elapsed||''}</td>
       <td>${ss}</td>`;
     tbody.appendChild(tr);
   });
 
+
   document.getElementById('tbl-count').textContent = S.sorted.length;
 }
 
-function badge(status) {
-  const map = {
-    Passed:  ['b-pass',  '✓ Passed'],
-    Failed:  ['b-fail',  '✗ Failed'],
-    Running: ['b-run',   '⟳ Running'],
-    Skipped: ['b-skip',  '– Skipped'],
-  };
-  const [cls, label] = map[status] || ['b-wait', '· Pending'];
-  return `<span class="badge ${cls}">${label}</span>`;
+// In-place Excel cell editing handler
+async function handleCellEdit(key, field, newValue) {
+  const val = String(newValue||'').trim();
+  const row = S.rows.find(r => `${r['TC ID']}||${r['Role']}||${r['Permission Type']}` === key);
+  if (row) {
+    row[field] = val;
+    renderTable();
+    log(`[EDIT] ${row['TC ID']} ${field} updated -> "${val.slice(0,30)}"`, 'info');
+    try {
+      await fetch('/api/update_row', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tc_id: row['TC ID'], role: row['Role'], field, value: val })
+      });
+    } catch {}
+  }
 }
 
 function sortTable(key) {
@@ -248,6 +447,7 @@ function clearResults() {
   S.rows = []; renderTable(); clearLog();
   showStatsBar(false);
   document.getElementById('tbl-count').textContent = '';
+  renderStatusChart(0, 0);
 }
 
 // ── Progress & stats ───────────────────────────────────────────────────────────
@@ -290,7 +490,7 @@ function startTimer() {
     const sec  = Math.floor((Date.now() - S.startTime) / 1000);
     const m    = Math.floor(sec / 60).toString().padStart(2,'0');
     const s    = (sec % 60).toString().padStart(2,'0');
-    document.getElementById('pill-time').textContent = `⏱ ${m}:${s}`;
+    document.getElementById('pill-time').textContent = `Time: ${m}:${s}`;
   }, 1000);
 }
 function stopTimer() {
@@ -300,10 +500,6 @@ function stopTimer() {
 // ── Run control ────────────────────────────────────────────────────────────────
 function getChips(id) {
   return [...document.querySelectorAll(`#${id} .chip.active`)].map(c => c.dataset.val);
-}
-function toggleAllChips(id, on) {
-  document.querySelectorAll(`#${id} .chip`).forEach(c =>
-    on ? c.classList.add('active') : c.classList.remove('active'));
 }
 
 async function startRun() {
@@ -317,13 +513,23 @@ async function startRun() {
   const headless    = document.getElementById('inp-mode').value === '1';
   const proof_delay = parseFloat(document.getElementById('inp-proof-delay').value) || 1.5;
   const tcRaw       = document.getElementById('inp-tc-filter').value.trim();
-  const tc_ids      = tcRaw ? tcRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
+  let tc_ids        = tcRaw ? tcRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
+
+  // Auto-pick next pending test cases if limit is set and no explicit TC IDs entered
+  if (!tc_ids && limit && S.rows.length) {
+    const pending = S.rows.filter(r => !r.Status || r.Status === 'Pending' || r.Status === 'Skipped');
+    if (pending.length) {
+      tc_ids = pending.slice(0, limit).map(r => r['TC ID']);
+      log(`[QUEUE] Selected next ${tc_ids.length} pending case(s): ${tc_ids.join(', ')}`, 'info');
+    }
+  }
 
   S.rows = []; renderTable(); clearLog();
   const r = await fetch('/api/run', {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ types, roles, limit, headless, tc_ids, proof_delay })
   }).then(r => r.json());
+
   if (r.error) { alert(r.error); }
 }
 
@@ -339,7 +545,7 @@ async function retryFailed() {
 }
 
 function stopRun() {
-  log('⏹ Requesting instant stop...', 'warn');
+  log('[STOP] Requesting instant stop...', 'warn');
   updateMonitorBadge('STOPPING...', 'Closing browser session');
   fetch('/api/stop', { method: 'POST' });
 }
@@ -354,24 +560,40 @@ function setRunUI(running) {
   }
 }
 
+// ── Save & Sync vs Download Excel Options ──────────────────────────────────────
+async function syncCurrentEdits() {
+  const syncBtn = document.getElementById('btn-sync-report');
+  const oldTxt  = syncBtn ? syncBtn.textContent : 'Save & Sync';
+  if (syncBtn) syncBtn.textContent = 'Syncing Excel...';
+
+  try {
+    const res = await fetch('/api/save_report', { method: 'POST' }).then(r => r.json());
+    log(`[SYNC] Saved and synced edits to current report file (${res.count||0} records)`, 'ok');
+    if (syncBtn) {
+      syncBtn.textContent = 'Synced to test_results.xlsx';
+      setTimeout(() => { syncBtn.textContent = oldTxt; }, 2200);
+    }
+  } catch (err) {
+    log(`[SYNC ERROR] Failed to sync edits: ${err}`, 'fail');
+    if (syncBtn) syncBtn.textContent = oldTxt;
+  }
+}
+
+function downloadReport() {
+  log('[DOWNLOAD] Downloading test_results.xlsx...', 'info');
+  window.open('/api/report', '_blank');
+}
+
+async function saveAndDownloadReport() {
+  await syncCurrentEdits();
+  downloadReport();
+}
+
+
 // ── Preview ────────────────────────────────────────────────────────────────────
 async function previewTests() {
-  const types = getChips('chip-types');
-  const roles = getChips('chip-roles');
-  const limit = parseInt(document.getElementById('inp-limit').value) || null;
-  const params = new URLSearchParams();
-  types.forEach(t => params.append('type', t));
-  roles.forEach(r => params.append('role', r));
-  if (limit) params.append('limit', limit);
-
-  const data = await fetch(`/api/testcases?${params}`).then(r => r.json());
-  S.rows = data.rows.map(r => ({
-    ...r, Status: '', Comments: '', App: '', Elapsed: '', Screenshot: '',
-    _step: r['ขั้นตอนทดสอบ'] || '', _expected: r['ผลที่คาดหวัง'] || ''
-  }));
-  renderTable();
-  showStatsBar(false);
-  log(`Preview: ${data.total} test cases`, 'info');
+  updateMatchingCount();
+  log(`[PREVIEW] Displayed matched execution queue`, 'info');
 }
 
 // ── TC Detail modal ────────────────────────────────────────────────────────────
@@ -382,7 +604,7 @@ function openDetail(key) {
   if (!row && !data) return;
 
   const d = { ...(data||{}), ...(row||{}) };
-  const bd = badge(d.Status || '');
+  const bd = `<span class="badge b-wait">${d.Status||'Pending'}</span>`;
 
   document.getElementById('modal-tc-body').innerHTML = `
     <div class="modal-title">${d['TC ID'] || ''} — ${d.Function || ''}</div>
@@ -390,17 +612,19 @@ function openDetail(key) {
     <div class="modal-row"><span class="modal-key">Role</span><span class="modal-val">${d.Role||''}</span></div>
     <div class="modal-row"><span class="modal-key">Type</span><span class="modal-val">${d['Permission Type']||''}</span></div>
     <div class="modal-row"><span class="modal-key">App</span><span class="modal-val">${d.App||d.app||''}</span></div>
-    <div class="modal-row"><span class="modal-key">Elapsed</span><span class="modal-val">${d.Elapsed||d.elapsed||'–'}</span></div>
-    <div class="modal-row"><span class="modal-key">Comment</span><span class="modal-val">${d.Comments||d.comment||'–'}</span></div>
+    <div class="modal-row"><span class="modal-key">Elapsed</span><span class="modal-val">${d.Elapsed||d.elapsed||'-'}</span></div>
+    <div class="modal-row"><span class="modal-key">Comment</span><span class="modal-val">${d.Comments||d.comment||'-'}</span></div>
     ${d._expected ? `<div class="modal-row"><span class="modal-key">Expected</span><span class="modal-val">${d._expected}</span></div>` : ''}
     ${d._step     ? `<div class="flt-label" style="margin-top:12px">Test Steps</div><div class="modal-step">${d._step}</div>` : ''}
-    ${d.Screenshot||d.screenshot ? `<div style="margin-top:12px"><button class="btn-ghost btn-sm" onclick="viewSS('${d.Screenshot||d.screenshot}')">View Screenshot</button></div>` : ''}
+    ${d.Screenshot||d.screenshot ? `<div style="margin-top:12px"><button class="btn-primary btn-sm" onclick="viewSS('${d.Screenshot||d.screenshot}', '${d['TC ID']}')">Preview Full Proof</button></div>` : ''}
   `;
   document.getElementById('modal-tc').style.display = 'grid';
 }
 
 // ── Screenshot modal ───────────────────────────────────────────────────────────
-function viewSS(name) {
+function viewSS(name, title="") {
+  const titleEl = document.getElementById('modal-ss-title');
+  if (titleEl) titleEl.textContent = title ? `Proof Evidence — ${title}` : 'Proof Screenshot';
   document.getElementById('modal-ss-img').src = `/screenshots/${name}`;
   document.getElementById('modal-ss').style.display = 'grid';
 }
@@ -408,12 +632,14 @@ function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { closeModal('modal-tc'); closeModal('modal-ss'); }
+  if (e.key === 'Escape') {
+    closeModal('modal-tc');
+    closeModal('modal-ss');
+    closeModal('modal-live-full');
+  }
 });
 
 // ── Report / Export ────────────────────────────────────────────────────────────
-function downloadReport() { window.open('/api/report', '_blank'); }
-
 function exportCSV() {
   const rows  = S.sorted.length ? S.sorted : S.rows;
   if (!rows.length) { alert('No data to export'); return; }
@@ -557,7 +783,7 @@ function saveConfig() {
 
   const btn = document.querySelector('[onclick="saveConfig()"]');
   const orig = btn.textContent;
-  btn.textContent = '✓ Saved!';
+  btn.textContent = 'Saved!';
   setTimeout(() => { btn.textContent = orig; }, 1500);
 }
 
@@ -574,10 +800,14 @@ function showPanel(id, btn) {
 // ── Boot ───────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.chip').forEach(c =>
-    c.addEventListener('click', () => c.classList.toggle('active')));
+    c.addEventListener('click', () => {
+      c.classList.toggle('active');
+      updateMatchingCount();
+    }));
 
   connectSSE();
-  log('Dashboard ready — configure filters and click Run Selected.', 'muted');
+  log('Dashboard ready — choose a test preset or configure filters.', 'muted');
+  updateMatchingCount();
 
   fetch('/api/state').then(r => r.json()).then(d => {
     if (d.results?.length) {

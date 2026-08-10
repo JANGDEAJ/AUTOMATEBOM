@@ -1,4 +1,4 @@
-﻿"""
+"""
 server.py - BOM UAT Automation Dashboard (Flask + SSE + Live View + Fast Interrupt)
 """
 import sys, os, json, queue, threading, traceback, time, uuid, base64
@@ -37,6 +37,13 @@ _ctx_lock = threading.Lock()
 _sse_queues: dict[str, queue.Queue] = {}
 _sse_lock = threading.Lock()
 
+try:
+    load_testcases()
+    load_nav_matrix()
+except Exception as e:
+    print(f"Loader cache pre-warm warning: {e}", sys.stderr)
+
+
 def _broadcast(event_type: str, data: dict):
     payload = json.dumps({"type": event_type, "data": data}, ensure_ascii=False)
     with _sse_lock:
@@ -57,13 +64,19 @@ def serve_screenshot(name):
 
 @app.route("/api/testcases")
 def api_testcases():
-    perm  = request.args.getlist("type") or None
-    roles = request.args.getlist("role") or None
-    limit = request.args.get("limit", type=int, default=None)
-    df    = load_testcases(permission_types=perm, roles=roles, limit=limit)
-    rows  = df[["TC ID","Module","Function","Role","Permission Type",
-                "ขั้นตอนทดสอบ","ผลที่คาดหวัง"]].to_dict(orient="records")
-    return jsonify({"total": len(rows), "rows": rows})
+    try:
+        perm  = request.args.getlist("type") or None
+        roles = request.args.getlist("role") or None
+        limit = request.args.get("limit", type=int, default=None)
+        df    = load_testcases(permission_types=perm, roles=roles, limit=limit)
+        df    = df.fillna("")
+        cols  = [c for c in ["TC ID","Module","Function","Role","Permission Type","ขั้นตอนทดสอบ","ผลที่คาดหวัง"] if c in df.columns]
+        rows  = df[cols].to_dict(orient="records")
+        return jsonify({"total": len(rows), "rows": rows})
+    except Exception as e:
+        print(f"[API TESTCASES ERROR] {e}", sys.stderr)
+        return jsonify({"error": str(e), "total": 0, "rows": []}), 500
+
 
 @app.route("/api/state")
 def api_state():
@@ -117,12 +130,45 @@ def api_stop():
 def api_results():
     return jsonify(_state)
 
+@app.route("/api/update_row", methods=["POST"])
+def api_update_row():
+    body  = request.get_json(force=True)
+    tc_id = body.get("tc_id")
+    role  = body.get("role")
+    field = body.get("field")
+    value = body.get("value")
+    
+    updated = False
+    for r in _state.get("results", []):
+        if r.get("TC ID") == tc_id and r.get("Role") == role:
+            r[field] = value
+            updated = True
+            break
+            
+    if updated:
+        try: save_report(_state["results"])
+        except Exception: pass
+        return jsonify({"status": "updated", "tc_id": tc_id, "field": field})
+    return jsonify({"status": "not_found"}), 404
+
+@app.route("/api/save_report", methods=["POST"])
+def api_save_report():
+    if _state.get("results"):
+        save_report(_state["results"])
+        return jsonify({"status": "saved", "count": len(_state["results"])})
+    return jsonify({"status": "empty", "count": 0})
+
+
 @app.route("/api/report")
 def api_report():
     from config import REPORT_FILE
+    if _state.get("results"):
+        try: save_report(_state["results"])
+        except Exception: pass
     if os.path.exists(REPORT_FILE):
         return send_from_directory(REPORT_DIR, os.path.basename(REPORT_FILE), as_attachment=True)
     return jsonify({"error": "No report"}), 404
+
 
 @app.route("/api/events")
 def api_events():
@@ -192,10 +238,12 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
 
                 nav_info = nav.get(func, {})
                 app_name = nav_info.get("app", func)
+                app_name_str = str(app_name if app_name and not (isinstance(app_name, float)) else func or "")
                 for key in ["Point of Sale","Sales","Accounting","Purchase",
                             "Inventory","Request","Fleet","MPOS","Contacts","Settings"]:
-                    if key.lower() in app_name.lower():
+                    if key.lower() in app_name_str.lower():
                         app_name = key; break
+
 
                 _broadcast("tc_start", {"tc_id": tc_id, "role": role,
                                         "function": func, "type": ptype,
@@ -208,7 +256,12 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
                             try: _active_ctx.close()
                             except: pass
                     try:
-                        ctx, page_obj = login(browser, role)
+                        def make_cb(tc_id_val):
+                            def cb(page, label):
+                                _capture_live_frame(page, tc_id_val, label)
+                            return cb
+
+                        ctx, page_obj = login(browser, role, frame_cb=make_cb(tc_id))
                         with _ctx_lock:
                             _active_ctx = ctx
                             _active_page = page_obj
@@ -236,7 +289,9 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
                 try:
                     if _state["stop"]: break
                     status, comment = run_verification(
-                        _active_page, ptype, app_name, func, expected, role)
+                        _active_page, ptype, app_name, func, expected, role,
+                        frame_cb=lambda page, label: _capture_live_frame(page, tc_id, label))
+
                 except Exception as e:
                     if _state["stop"]: break
                     status  = "Failed"
@@ -244,7 +299,7 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
 
                 elapsed = round(time.time() - t0, 1)
 
-                # Capture final proof screenshot
+                # Capture final proof screenshot & broadcast immediately
                 try:
                     if _active_page:
                         _active_page.screenshot(path=ss_path)
@@ -252,9 +307,13 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
                 except:
                     ss_name = ""
 
-                # Proof freeze delay for user to inspect live picture
+                # Proof freeze delay: keep broadcasting live frame so user sees proof picture hold
                 if proof_delay > 0 and not _state["stop"]:
-                    time.sleep(proof_delay)
+                    t_hold = time.time() + proof_delay
+                    while time.time() < t_hold and not _state["stop"]:
+                        _capture_live_frame(_active_page, tc_id, label=f"PROOF [{status}] (Hold)")
+                        time.sleep(0.3)
+
 
                 if _state["stop"]: break
 

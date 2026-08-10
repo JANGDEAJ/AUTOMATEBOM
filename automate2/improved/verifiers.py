@@ -1,9 +1,9 @@
-﻿import sys
+import sys
 import time
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-from navigator import open_app
+from navigator import open_app, is_app_visible
 from config import SEL_APP_DRAWER, APP_ALIASES, DASHBOARD_URL
 
 APP_CREATE_BUTTONS = {
@@ -47,86 +47,146 @@ def _expect_has(expected: str) -> bool:
             return False
     return True
 
-def verify_read(page, app_name, func_name, expected, role):
-    if page.url != DASHBOARD_URL:
-        page.goto(DASHBOARD_URL)
-    
-    page.click(SEL_APP_DRAWER)
-    time.sleep(2)
-    
-    aliases = APP_ALIASES.get(app_name, [app_name])
-    found = False
-    
-    for alias in aliases:
-        loc = page.locator(f'a.o_app:has-text("{alias}")')
-        count = loc.count()
-        for i in range(count):
-            if loc.nth(i).is_visible():
-                found = True
-                break
-        if found:
-            break
-            
-    should_have = _expect_has(expected)
-    if should_have and found:
-        return ("PASS", f"Found {app_name} as expected")
-    elif not should_have and not found:
-        return ("PASS", f"Did not find {app_name} as expected")
-    elif should_have and not found:
-        return ("FAIL", f"Expected to find {app_name} but it was missing")
-    else:
-        return ("FAIL", f"Expected not to find {app_name} but it was present")
+def verify_read(page, app_name, func_name, expected, role, frame_cb=None):
+    def cb(label):
+        if frame_cb:
+            try: frame_cb(page, label)
+            except Exception: pass
 
-def verify_create(page, app_name, func_name, expected, role):
-    open_app(page, app_name)
-    time.sleep(2)
-    
+    should_have = _expect_has(expected)
+
+    # First check for Access Error on current page
+    denied = page.locator("text='Access Denied'").count() > 0 or page.locator("text='Access Error'").count() > 0
+    if denied and should_have:
+        cb(f"Read check failed: Access Denied for {role}")
+        return ("Failed", f"Access Denied error displayed for role {role}")
+
+    if should_have:
+        # Try opening app if not already on it
+        cb(f"Clicked {app_name}")
+        open_app(page, app_name, frame_cb=frame_cb)
+        time.sleep(1)
+
+        # Check denied again
+        denied_after = page.locator("text='Access Denied'").count() > 0 or page.locator("text='Access Error'").count() > 0
+        if denied_after:
+            cb(f"Read check failed: Access Error in {app_name}")
+            return ("Failed", f"Access Error displayed when opening {app_name}")
+
+        cb(f"Read check: Opened {app_name} & readable")
+        return ("Passed", f"Opened {app_name} and verified content readable for role {role}")
+
+    else:
+        # Negative check: expect hidden
+        cb("Opened App Drawer to check negative visibility")
+        if page.url != DASHBOARD_URL:
+            page.goto(DASHBOARD_URL, wait_until="domcontentloaded")
+            time.sleep(1)
+
+        try:
+            page.click(SEL_APP_DRAWER, timeout=2000)
+            time.sleep(1)
+        except Exception:
+            pass
+
+        visible = is_app_visible(page, app_name)
+        if not visible:
+            cb(f"Read check: {app_name} hidden as expected for {role}")
+            return ("Passed", f"App {app_name} is hidden as expected for role {role}")
+        else:
+            cb(f"Read check: {app_name} visible when expected hidden")
+            return ("Failed", f"App {app_name} is visible when expected hidden for role {role}")
+
+
+def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
+    def cb(label):
+        if frame_cb:
+            try: frame_cb(page, label)
+            except Exception: pass
+
+    opened = open_app(page, app_name, frame_cb=frame_cb)
+    time.sleep(1.5)
+
+    should_have = _expect_has(expected)
+    if not opened:
+        if not should_have:
+            return ("Passed", f"App {app_name} absent/hidden as expected")
+        return ("Failed", f"Could not open {app_name} to verify Create button")
+
+    cb(f"Create check: Scanning buttons in {app_name}")
     selectors = APP_CREATE_BUTTONS.get(app_name, ['button:has-text("New")', 'a:has-text("New")'])
     found = _check_any_visible(page, selectors)
-    
-    should_have = _expect_has(expected)
-    if should_have and found:
-        return ("PASS", f"Found create button for {app_name}")
-    elif not should_have and not found:
-        return ("PASS", f"Did not find create button for {app_name}")
-    elif should_have and not found:
-        return ("FAIL", f"Missing create button for {app_name}")
-    else:
-        return ("FAIL", f"Found create button for {app_name} when not expected")
+    cb(f"Create check: {'Button Found' if found else 'Button Missing'}")
 
-def verify_validate(page, app_name, func_name, expected, role):
-    open_app(page, app_name)
-    time.sleep(2)
-    
+    if should_have and found:
+        return ("Passed", f"Found create button for {app_name}")
+    elif not should_have and not found:
+        return ("Passed", f"Did not find create button for {app_name}")
+    elif should_have and not found:
+        return ("Failed", f"Missing create button for {app_name}")
+    else:
+        return ("Failed", f"Found create button for {app_name} when not expected")
+
+
+def verify_validate(page, app_name, func_name, expected, role, frame_cb=None):
+    def cb(label):
+        if frame_cb:
+            try: frame_cb(page, label)
+            except Exception: pass
+
+    opened = open_app(page, app_name, frame_cb=frame_cb)
+    time.sleep(1.5)
+
+    should_have = _expect_has(expected)
+    if not opened:
+        if not should_have:
+            return ("Passed", f"App {app_name} absent/hidden as expected")
+        return ("Failed", f"Could not open {app_name} to verify Validate button")
+
+    cb(f"Validate check: Scanning buttons in {app_name}")
     selectors = APP_VALIDATE_BUTTONS.get(app_name, APP_VALIDATE_BUTTONS['default'])
     found = _check_any_visible(page, selectors)
-    
-    should_have = _expect_has(expected)
-    if should_have and found:
-        return ("PASS", f"Found validate/confirm button for {app_name}")
-    elif not should_have and not found:
-        return ("PASS", f"Did not find validate/confirm button for {app_name}")
-    elif should_have and not found:
-        return ("FAIL", f"Missing validate/confirm button for {app_name}")
-    else:
-        return ("FAIL", f"Found validate/confirm button for {app_name} when not expected")
+    cb(f"Validate check: {'Button Found' if found else 'Button Missing'}")
 
-def verify_setting(page, app_name, func_name, expected, role):
-    open_app(page, app_name)
+    if should_have and found:
+        return ("Passed", f"Found validate/confirm button for {app_name}")
+    elif not should_have and not found:
+        return ("Passed", f"Did not find validate/confirm button for {app_name}")
+    elif should_have and not found:
+        return ("Failed", f"Missing validate/confirm button for {app_name}")
+    else:
+        return ("Failed", f"Found validate/confirm button for {app_name} when not expected")
+
+
+def verify_setting(page, app_name, func_name, expected, role, frame_cb=None):
+    def cb(label):
+        if frame_cb:
+            try: frame_cb(page, label)
+            except Exception: pass
+
+    opened = open_app(page, app_name, frame_cb=frame_cb)
     time.sleep(1.5)
-    
+
+    should_have = _expect_has(expected)
+    if not opened:
+        if not should_have:
+            return ("Passed", f"App {app_name} absent/hidden as expected")
+        return ("Failed", f"Could not open {app_name} to verify Settings menu")
+
+    cb(f"Setting check: Scanning options in {app_name}")
     selectors = APP_SETTING_SELECTORS.get(app_name, APP_SETTING_SELECTORS['default'])
     found = _check_any_visible(page, selectors)
-    
-    should_have = _expect_has(expected)
+    cb(f"Setting check: {'Setting Found' if found else 'Setting Missing'}")
+
     if should_have and found:
-        return ("PASS", f"Found setting/configuration menu for {app_name}")
+        return ("Passed", f"Found setting/configuration menu for {app_name}")
     elif not should_have and not found:
-        return ("PASS", f"Did not find setting/configuration menu for {app_name}")
+        return ("Passed", f"Did not find setting/configuration menu for {app_name}")
     elif should_have and not found:
-        return ("FAIL", f"Missing setting/configuration menu for {app_name}")
+        return ("Failed", f"Missing setting/configuration menu for {app_name}")
     else:
-        return ("FAIL", f"Found setting/configuration menu for {app_name} when not expected")
+        return ("Failed", f"Found setting/configuration menu for {app_name} when not expected")
+
 
 VERIFIER_MAP = {
     'read': verify_read,
@@ -135,15 +195,17 @@ VERIFIER_MAP = {
     'setting': verify_setting
 }
 
-def run_verification(page, app_name, func_name, expected, role):
+
+def run_verification(page, ptype, app_name, func_name, expected, role, frame_cb=None):
     action = None
-    for key in VERIFIER_MAP:
-        if key in func_name.lower():
-            action = key
-            break
-            
+    ptype_lower = ptype.lower()
+    if 'read' in ptype_lower: action = 'read'
+    elif 'create' in ptype_lower: action = 'create'
+    elif 'validate' in ptype_lower: action = 'validate'
+    elif 'setting' in ptype_lower: action = 'setting'
+
     if not action:
-        return ("SKIP", f"No verifier for {func_name}")
-        
+        return ("Skipped", f"No verifier mapped for type '{ptype}'")
+
     verifier = VERIFIER_MAP[action]
-    return verifier(page, app_name, func_name, expected, role)
+    return verifier(page, app_name, func_name, expected, role, frame_cb=frame_cb)

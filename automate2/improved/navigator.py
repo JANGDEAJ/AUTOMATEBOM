@@ -1,30 +1,32 @@
-﻿"""
-navigator.py - App Grid navigation helpers
+"""
+navigator.py - App Grid navigation helpers with simple audit logging
 """
 
 from config import SEL_APP_DRAWER, APP_ALIASES, DASHBOARD_URL
 
 
-def open_app(page, app_name: str) -> bool:
+def open_app(page, app_name: str, frame_cb=None) -> bool:
     """
-    Click the top-left 4-dots icon and look for app_name (or its aliases) in
-    the App Grid. Returns True if found + visible, False otherwise.
-    Also navigates to the app if found.
+    Click the top-left 4-dots icon and look for app_name in App Grid.
     """
-    try:
-        # Back to dashboard first to ensure App Drawer icon is present
-        if DASHBOARD_URL not in page.url:
-            page.goto(DASHBOARD_URL, wait_until="domcontentloaded")
-            page.wait_for_timeout(1500)
+    def cb(label):
+        if frame_cb:
+            try: frame_cb(page, label)
+            except Exception: pass
 
-        # Click 4-dots app drawer
+    try:
+        if DASHBOARD_URL not in page.url:
+            cb("Open browser home page")
+            page.goto(DASHBOARD_URL, wait_until="domcontentloaded")
+            page.wait_for_timeout(1000)
+
         drawer = page.locator(SEL_APP_DRAWER).first
         if not drawer.is_visible(timeout=5000):
             return False
+        cb("Opened App Drawer")
         drawer.click()
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(1500)
 
-        # Search aliases (most specific first)
         aliases = APP_ALIASES.get(app_name, [app_name])
         for alias in aliases:
             loc = page.get_by_text(alias, exact=True)
@@ -32,8 +34,10 @@ def open_app(page, app_name: str) -> bool:
                 elem = loc.nth(i)
                 if elem.is_visible():
                     try:
+                        cb(f"Clicked {alias}")
                         elem.click()
                         page.wait_for_timeout(1500)
+                        cb(f"Opened {alias}")
                     except Exception:
                         pass
                     return True
@@ -44,10 +48,6 @@ def open_app(page, app_name: str) -> bool:
 
 
 def is_app_visible(page, app_name: str) -> bool:
-    """
-    Check if app_name (or aliases) exists and is visible in current page state.
-    Does NOT click anything. Used for negative (hidden) checks.
-    """
     aliases = APP_ALIASES.get(app_name, [app_name])
     for alias in aliases:
         loc = page.get_by_text(alias, exact=True)

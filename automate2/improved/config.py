@@ -1,4 +1,4 @@
-﻿"""
+"""
 config.py - Centralized configuration for BOM UAT Automation
 """
 
@@ -59,7 +59,7 @@ EXPECT = {
 }
 
 # CSS Selectors
-SEL_APP_DRAWER   = "a.appDrawerToggle"
+SEL_APP_DRAWER   = "a.appDrawerToggle, a.o_navbar_apps_menu, a[title='Apps'], .o_main_navbar a.o_nav_entry, header nav a:first-child"
 SEL_LOGIN_USER   = "input[name='login']"
 SEL_LOGIN_PASS   = "input[name='password']"
 SEL_LOGIN_SUBMIT = "button[type='submit']"

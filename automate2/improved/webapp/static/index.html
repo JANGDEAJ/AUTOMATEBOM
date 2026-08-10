@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>BOM UAT · Automation Dashboard</title>
+<title>BOM UAT Automation Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..700;1,14..32,400&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="/static/style.css"/>
@@ -20,23 +20,23 @@
   </div>
 
   <nav>
-    <button class="nav-btn active" data-panel="run"     onclick="showPanel('run',this)">&#9654; Run Tests</button>
-    <button class="nav-btn"        data-panel="config"  onclick="showPanel('config',this)">&#9881; Config</button>
-    <button class="nav-btn"        data-panel="results" onclick="showPanel('results',this)">&#128202; Summary</button>
-    <button class="nav-btn"        data-panel="log"     onclick="showPanel('log',this)">&#128203; Full Log</button>
+    <button class="nav-btn active" data-panel="run"     onclick="showPanel('run',this)">Run Tests</button>
+    <button class="nav-btn"        data-panel="config"  onclick="showPanel('config',this)">Config</button>
+    <button class="nav-btn"        data-panel="results" onclick="showPanel('results',this)">Summary</button>
+    <button class="nav-btn"        data-panel="log"     onclick="showPanel('log',this)">Full Log</button>
   </nav>
 
   <div class="sidebar-stats">
     <div class="mini-stat">
-      <div class="mini-val" id="sb-total">–</div>
+      <div class="mini-val" id="sb-total">-</div>
       <div class="mini-lbl">Total</div>
     </div>
     <div class="mini-stat pass">
-      <div class="mini-val" id="sb-pass">–</div>
+      <div class="mini-val" id="sb-pass">-</div>
       <div class="mini-lbl">Pass</div>
     </div>
     <div class="mini-stat fail">
-      <div class="mini-val" id="sb-fail">–</div>
+      <div class="mini-val" id="sb-fail">-</div>
       <div class="mini-lbl">Fail</div>
     </div>
   </div>
@@ -51,7 +51,7 @@
   </div>
 
   <div class="run-control-btns" id="ctrl-btns" style="display:none">
-    <button class="btn-stop-sm" onclick="stopRun()">&#9632; Instant Stop</button>
+    <button class="btn-stop-sm" onclick="stopRun()">Instant Stop</button>
   </div>
 
   <div class="sidebar-footer">
@@ -62,19 +62,23 @@
 
 <main id="main">
 
-  <!-- ═══ RUN PANEL ═══ -->
+  <!-- === RUN PANEL === -->
   <section id="panel-run" class="panel active">
     <div class="top-bar">
       <div>
         <h1>Run Tests</h1>
-        <p class="subtitle">Configure filters and run UAT automation tests</p>
+        <p class="subtitle">Quick test presets &amp; automated live proof monitor</p>
       </div>
       <div class="top-actions">
-        <button class="btn-ghost" onclick="previewTests()">&#128065; Preview</button>
-        <button class="btn-ghost" id="btn-toggle-monitor" onclick="toggleLiveMonitor()">&#128187; Toggle Live View</button>
-        <button class="btn-ghost" id="btn-retry" onclick="retryFailed()" style="display:none;color:var(--yellow)">&#8635; Retry Failed</button>
-        <button class="btn-primary" id="btn-run" onclick="startRun()">&#9654; Run Selected</button>
-        <button class="btn-danger" id="btn-stop" onclick="stopRun()" style="display:none">&#9632; Instant Stop</button>
+        <button class="btn-ghost" onclick="previewTests()">Preview</button>
+        <button class="btn-ghost" id="btn-expand-live" onclick="openLiveFullscreen()">Expand Preview Window</button>
+        <button class="btn-ghost" id="btn-toggle-monitor" onclick="toggleLiveMonitor()">Toggle Live View</button>
+        <button class="btn-ghost" id="btn-sync-report" onclick="syncCurrentEdits()">Save &amp; Sync Current</button>
+        <button class="btn-ghost" id="btn-dl-report" onclick="downloadReport()">Download Excel</button>
+        <button class="btn-ghost" id="btn-retry" onclick="retryFailed()" style="display:none;color:var(--yellow)">Retry Failed</button>
+        <button class="btn-primary" id="btn-run" onclick="startRun()">Run Selected</button>
+        <button class="btn-danger" id="btn-stop" onclick="stopRun()" style="display:none">Instant Stop</button>
+
       </div>
     </div>
 
@@ -82,30 +86,51 @@
       <div class="run-main-col">
         <!-- Filter card -->
         <div class="card filters-card">
-          <div class="card-section">
-            <div class="flt-label">Permission Types</div>
-            <div class="chip-row" id="chip-types">
-              <div class="chip active" data-val="Read">Read</div>
-              <div class="chip active" data-val="Create">Create</div>
-              <div class="chip active" data-val="Validate (approve/reject)">Validate</div>
-              <div class="chip active" data-val="Setting (set approver/master)">Setting</div>
+          <!-- Quick Presets Row -->
+          <div class="card-section preset-section">
+            <div class="preset-hdr">
+              <div class="flt-label">Test Presets</div>
+              <div class="matched-badge" id="matched-count-badge">Matched: calculating...</div>
+            </div>
+            <div class="preset-btn-row">
+              <button class="btn-preset active" data-preset="All" onclick="selectPreset('All')">Run All</button>
+              <button class="btn-preset" data-preset="Read" onclick="selectPreset('Read')">Test Read</button>
+              <button class="btn-preset" data-preset="Create" onclick="selectPreset('Create')">Test Create</button>
+              <button class="btn-preset" data-preset="Validate" onclick="selectPreset('Validate')">Test Validate</button>
+              <button class="btn-preset" data-preset="Setting" onclick="selectPreset('Setting')">Test Setting</button>
+              <button class="btn-ghost btn-sm" id="btn-toggle-adv" onclick="toggleAdvancedFilters()">Advanced Filters</button>
             </div>
           </div>
-          <div class="card-section">
-            <div class="flt-label">Roles</div>
-            <div class="chip-row" id="chip-roles">
-              <div class="chip active" data-val="Super Admin">Super Admin</div>
-              <div class="chip active" data-val="Admin">Admin</div>
-              <div class="chip active" data-val="Supervisor">Supervisor</div>
-              <div class="chip active" data-val="Super User">Super User</div>
-              <div class="chip active" data-val="User(Cashier)">Cashier</div>
-              <div class="chip active" data-val="Outsource">Outsource</div>
+
+          <!-- Advanced Filters Collapsible -->
+          <div id="advanced-filters-container" style="display:none">
+            <div class="card-section">
+              <div class="flt-label">Permission Types</div>
+              <div class="chip-row" id="chip-types">
+                <div class="chip active" data-val="Read">Read</div>
+                <div class="chip active" data-val="Create">Create</div>
+                <div class="chip active" data-val="Validate (approve/reject)">Validate</div>
+                <div class="chip active" data-val="Setting (set approver/master)">Setting</div>
+              </div>
+            </div>
+            <div class="card-section">
+              <div class="flt-label">Roles</div>
+              <div class="chip-row" id="chip-roles">
+                <div class="chip active" data-val="Super Admin">Super Admin</div>
+                <div class="chip active" data-val="Admin">Admin</div>
+                <div class="chip active" data-val="Supervisor">Supervisor</div>
+                <div class="chip active" data-val="Super User">Super User</div>
+                <div class="chip active" data-val="User(Cashier)">Cashier</div>
+                <div class="chip active" data-val="Outsource">Outsource</div>
+              </div>
             </div>
           </div>
+
+          <!-- Inline Execution Settings -->
           <div class="card-section card-row-inline">
             <div class="flt-field">
               <div class="flt-label">Limit</div>
-              <input id="inp-limit" class="inp" type="number" placeholder="All" min="1" style="width:70px"/>
+              <input id="inp-limit" class="inp" type="number" placeholder="All" min="1" style="width:75px" oninput="updateMatchingCount()"/>
             </div>
             <div class="flt-field">
               <div class="flt-label">Browser Mode</div>
@@ -124,14 +149,29 @@
               </select>
             </div>
             <div class="flt-field" style="flex:1">
-              <div class="flt-label">TC IDs</div>
-              <input id="inp-tc-filter" class="inp" type="text" placeholder="TC-265, TC-266 …"/>
+              <div class="flt-label">TC IDs Filter</div>
+              <input id="inp-tc-filter" class="inp" type="text" placeholder="TC-265, TC-266 ..." oninput="updateMatchingCount()"/>
             </div>
-            <div class="flt-field">
-              <div class="flt-label">Quick Select</div>
-              <button class="btn-ghost btn-sm" onclick="toggleAllChips('chip-types',true);toggleAllChips('chip-roles',true)">All</button>
-              <button class="btn-ghost btn-sm" onclick="toggleAllChips('chip-types',false);toggleAllChips('chip-roles',false)">None</button>
-            </div>
+          </div>
+        </div>
+
+        <!-- Live Visual Breakdown Graph Bar Widget -->
+        <div class="card chart-card" id="chart-widget" style="margin-bottom:16px;padding:14px 18px">
+          <div class="chart-hdr">
+            <div class="flt-label">Live Status Breakdown Graph</div>
+            <div class="chart-stats-summary" id="chart-stats-summary">0 Matched | 0 Queued</div>
+          </div>
+          <div class="chart-bar-wrap">
+            <div class="chart-bar-seg seg-pass" id="cbar-pass" style="width:0%" title="Passed"></div>
+            <div class="chart-bar-seg seg-fail" id="cbar-fail" style="width:0%" title="Failed"></div>
+            <div class="chart-bar-seg seg-queued" id="cbar-queued" style="width:0%" title="Queued Target"></div>
+            <div class="chart-bar-seg seg-matched" id="cbar-matched" style="width:100%" title="Remaining Matched"></div>
+          </div>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="lg-dot pass"></span> Passed (<span id="lg-val-pass">0</span>)</span>
+            <span class="legend-item"><span class="lg-dot fail"></span> Failed (<span id="lg-val-fail">0</span>)</span>
+            <span class="legend-item"><span class="lg-dot queued"></span> Queued Target (<span id="lg-val-queued">0</span>)</span>
+            <span class="legend-item"><span class="lg-dot matched"></span> Matched Total (<span id="lg-val-matched">0</span>)</span>
           </div>
         </div>
 
@@ -142,7 +182,7 @@
           <div class="stat-pill fail"  id="pill-fail">0 Failed</div>
           <div class="stat-pill skip"  id="pill-skip">0 Skipped</div>
           <div class="stat-pill rate"  id="pill-rate">0% Pass Rate</div>
-          <div class="stat-pill time"  id="pill-time"></div>
+          <div class="stat-pill time"  id="pill-time">Time: 00:00</div>
         </div>
 
         <!-- Live log -->
@@ -157,7 +197,7 @@
 
         <!-- Table header -->
         <div class="section-hdr" style="margin-top:16px">
-          <span>Test Cases <span class="badge-count" id="tbl-count"></span></span>
+          <span>Live Test Cases Table <span class="badge-count" id="tbl-count"></span> <span class="excel-synced-tip">Click cell to edit &amp; sync</span></span>
           <div class="hdr-actions">
             <select id="filter-status" class="inp inp-xs" onchange="renderTable()">
               <option value="">All Status</option>
@@ -177,7 +217,7 @@
               <option value="Validate (approve/reject)">Validate</option>
               <option value="Setting (set approver/master)">Setting</option>
             </select>
-            <input id="tbl-search" class="inp inp-xs" placeholder="Search…" oninput="renderTable()"/>
+            <input id="tbl-search" class="inp inp-xs" placeholder="Search..." oninput="renderTable()"/>
             <button class="btn-ghost btn-sm" onclick="clearResults()">Clear</button>
           </div>
         </div>
@@ -185,78 +225,88 @@
           <table id="tbl-main">
             <thead>
               <tr>
-                <th width="90" onclick="sortTable('TC ID')">TC ID &#8645;</th>
-                <th onclick="sortTable('Role')">Role &#8645;</th>
-                <th onclick="sortTable('Permission Type')">Type &#8645;</th>
+                <th width="75">Queue</th>
+                <th width="90" onclick="sortTable('TC ID')">TC ID</th>
+                <th onclick="sortTable('Role')">Role</th>
+                <th onclick="sortTable('Permission Type')">Type</th>
                 <th>App</th>
-                <th>Function</th>
-                <th onclick="sortTable('Status')">Status &#8645;</th>
-                <th>Comment</th>
+                <th>Function (Editable)</th>
+                <th onclick="sortTable('Status')">Status</th>
+                <th>Comment (Editable)</th>
                 <th width="60">Time</th>
-                <th width="40">SS</th>
+                <th width="80">Proof Image</th>
               </tr>
             </thead>
             <tbody id="tbl-body"></tbody>
           </table>
         </div>
         <div class="tbl-footer">
-          <button class="btn-ghost btn-sm" onclick="exportCSV()">&#128229; Export CSV</button>
-          <button class="btn-primary btn-sm" onclick="downloadReport()">&#128196; Download Excel</button>
+          <button class="btn-ghost btn-sm" onclick="exportCSV()">Export CSV</button>
+          <button class="btn-ghost btn-sm" onclick="downloadReport()">Download Excel File</button>
+          <button class="btn-primary btn-sm" onclick="syncCurrentEdits()">Save &amp; Sync to Current Excel</button>
         </div>
+
       </div>
 
       <!-- Live Monitor Side Panel -->
-      <div class="live-monitor-panel" id="live-monitor-panel">
+      <div class="live-monitor-panel sz-large" id="live-monitor-panel">
         <div class="monitor-hdr">
           <div class="monitor-title">
-            <span class="live-dot pulse-green">●</span> Live Proof Monitor
+            <span class="live-dot pulse-green"></span> Live Proof Monitor
           </div>
           <div class="monitor-actions">
-            <select id="monitor-size" class="inp inp-xs" onchange="changeMonitorSize(this.value)">
-              <option value="medium">Normal Size</option>
-              <option value="large">Large Size</option>
-              <option value="small">Compact</option>
-            </select>
-            <button class="btn-icon" onclick="toggleLiveMonitor()" title="Close monitor">&#10005;</button>
+            <button class="btn-icon-text" onclick="openLiveFullscreen()" title="Full Preview">Full Screen</button>
+            <button class="btn-icon-text" onclick="toggleLiveMonitor()" title="Close monitor">Close</button>
           </div>
         </div>
-        <div class="monitor-frame-container">
-          <div class="monitor-overlay-badge" id="monitor-badge">Waiting for test run...</div>
-          <img id="live-monitor-img" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='250' viewBox='0 0 400 250'><rect width='400' height='250' fill='%23131720'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='13'>Live Browser Screen Stream</text></svg>" alt="Live stream proof"/>
+        <div class="monitor-frame-container" onclick="openLiveFullscreen()" style="cursor:pointer" title="Click to open Fullscreen Preview">
+          <div class="monitor-overlay-badge" id="monitor-badge">Ready to stream...</div>
+          <img id="live-monitor-img" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='600' height='375' viewBox='0 0 600 375'><rect width='600' height='375' fill='%23131720'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='%2364748b' font-family='sans-serif' font-size='14'>Live Stream Window (Click to Expand)</text></svg>" alt="Live stream proof"/>
         </div>
         <div class="monitor-meta">
-          <div class="meta-item"><span class="meta-lbl">TC ID:</span> <span id="mon-tc-id" class="meta-val">–</span></div>
-          <div class="meta-item"><span class="meta-lbl">Status:</span> <span id="mon-status" class="meta-val">–</span></div>
+          <div class="meta-item"><span class="meta-lbl">TC ID:</span> <span id="mon-tc-id" class="meta-val">-</span></div>
+          <div class="meta-item"><span class="meta-lbl">Status:</span> <span id="mon-status" class="meta-val">-</span></div>
           <div class="meta-item"><span class="meta-lbl">Action:</span> <span id="mon-action" class="meta-val">Idle</span></div>
+        </div>
+
+        <!-- Recent Proofs Feed (Latest on Top) -->
+        <div class="proofs-feed-container">
+          <div class="proofs-feed-hdr">
+            <span>Recent Proofs Feed</span>
+            <span class="proofs-feed-sub">Latest on Top</span>
+          </div>
+          <div id="proofs-gallery" class="proofs-gallery">
+            <div class="proof-empty-tip" id="proof-empty-tip">No test proofs captured yet</div>
+          </div>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ═══ CONFIG PANEL ═══ -->
+  <!-- === CONFIG PANEL === -->
   <section id="panel-config" class="panel">
     <div class="top-bar">
       <div><h1>Configuration</h1><p class="subtitle">Edit credentials and settings (saved in browser)</p></div>
-      <button class="btn-primary" onclick="saveConfig()">&#128190; Save</button>
+      <button class="btn-primary" onclick="saveConfig()">Save Config</button>
     </div>
     <div class="config-grid" id="config-grid"></div>
     <div class="card" style="margin-top:16px;padding:16px">
       <div class="flt-label">App Button Aliases (JSON)</div>
       <textarea id="cfg-aliases" class="inp" rows="8" style="width:100%;font-family:monospace;font-size:12px;margin-top:6px"></textarea>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px">Edit app name aliases used for App Grid detection. Restart server to apply.</div>
+      <div style="font-size:11px;color:var(--muted2);margin-top:6px">Edit app name aliases used for App Grid detection. Restart server to apply.</div>
     </div>
   </section>
 
-  <!-- ═══ SUMMARY PANEL ═══ -->
+  <!-- === SUMMARY PANEL === -->
   <section id="panel-results" class="panel">
     <div class="top-bar">
       <div><h1>Summary</h1><p class="subtitle">Last run statistics</p></div>
-      <button class="btn-primary btn-sm" onclick="downloadReport()">&#128196; Download Excel</button>
+      <button class="btn-primary btn-sm" onclick="saveAndDownloadReport()">Save &amp; Download Excel</button>
     </div>
     <div id="summary-body"></div>
   </section>
 
-  <!-- ═══ FULL LOG PANEL ═══ -->
+  <!-- === FULL LOG PANEL === -->
   <section id="panel-log" class="panel">
     <div class="top-bar">
       <div><h1>Full Log</h1></div>
@@ -267,10 +317,26 @@
 
 </main>
 
+<!-- Fullscreen Live Stream Modal -->
+<div id="modal-live-full" class="modal-bg" onclick="closeModal('modal-live-full')" style="display:none">
+  <div class="modal-box modal-live-full-box" onclick="event.stopPropagation()">
+    <div class="modal-full-hdr">
+      <div>
+        <div class="modal-title" style="margin:0">Live Monitor — Fullscreen View</div>
+        <div class="subtitle" id="modal-live-badge-txt">Real-time browser stream</div>
+      </div>
+      <button class="modal-close" onclick="closeModal('modal-live-full')">Close</button>
+    </div>
+    <div class="modal-live-full-container">
+      <img id="modal-live-full-img" src="" alt="Fullscreen Live Stream"/>
+    </div>
+  </div>
+</div>
+
 <!-- TC Detail Modal -->
 <div id="modal-tc" class="modal-bg" onclick="closeModal('modal-tc')" style="display:none">
   <div class="modal-box" onclick="event.stopPropagation()">
-    <button class="modal-close" onclick="closeModal('modal-tc')">&#10005;</button>
+    <button class="modal-close" onclick="closeModal('modal-tc')">Close</button>
     <div id="modal-tc-body"></div>
   </div>
 </div>
@@ -278,7 +344,10 @@
 <!-- Screenshot Modal -->
 <div id="modal-ss" class="modal-bg" onclick="closeModal('modal-ss')" style="display:none">
   <div class="modal-box modal-img-box" onclick="event.stopPropagation()">
-    <button class="modal-close" onclick="closeModal('modal-ss')">&#10005;</button>
+    <div class="modal-full-hdr" style="margin-bottom:10px">
+      <div class="modal-title" id="modal-ss-title" style="margin:0">Proof Screenshot</div>
+      <button class="modal-close" onclick="closeModal('modal-ss')">Close</button>
+    </div>
     <img id="modal-ss-img" src="" alt="screenshot"/>
   </div>
 </div>

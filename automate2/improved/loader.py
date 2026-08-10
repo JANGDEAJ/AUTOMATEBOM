@@ -1,5 +1,5 @@
 """
-loader.py - Load test cases and navigation matrix from Excel
+loader.py - Load test cases and navigation matrix from Excel with in-memory caching
 """
 import sys
 sys.stdout.reconfigure(encoding='utf-8')
@@ -7,15 +7,21 @@ sys.stdout.reconfigure(encoding='utf-8')
 import pandas as pd
 from config import EXCEL_SOURCE, APP_ALIASES
 
+_tc_cache = None
+_nav_cache = None
 
-def load_testcases(permission_types=None, roles=None, limit=None) -> pd.DataFrame:
-    """
-    Load BOM_Role_TestCases sheet, filter by permission_types and/or roles.
-    """
-    df = pd.read_excel(EXCEL_SOURCE, sheet_name="BOM_Role_TestCases")
 
-    # Normalise column names - strip whitespace
-    df.columns = [c.strip() for c in df.columns]
+def load_testcases(permission_types=None, roles=None, limit=None, force_reload=False) -> pd.DataFrame:
+    """
+    Load BOM_Role_TestCases sheet from memory cache (or Excel if uncached), filter by permission_types/roles.
+    """
+    global _tc_cache
+    if _tc_cache is None or force_reload:
+        df = pd.read_excel(EXCEL_SOURCE, sheet_name="BOM_Role_TestCases")
+        df.columns = [c.strip() for c in df.columns]
+        _tc_cache = df
+
+    df = _tc_cache.copy()
 
     if permission_types:
         df = df[df["Permission Type"].isin(permission_types)]
@@ -27,13 +33,14 @@ def load_testcases(permission_types=None, roles=None, limit=None) -> pd.DataFram
     return df.reset_index(drop=True)
 
 
-def load_nav_matrix() -> dict:
+def load_nav_matrix(force_reload=False) -> dict:
     """
-    Load User Matrix | THP Core sheet and build a dict:
-    {func_name: {"app": "Point of Sale", ...}}
-    Columns 2 (Unnamed: 2) onwards contain the App name per role.
-    We use column 2 (Super Admin app) as the canonical app name.
+    Load User Matrix | THP Core sheet from memory cache (or Excel if uncached).
     """
+    global _nav_cache
+    if _nav_cache is not None and not force_reload:
+        return _nav_cache
+
     df = pd.read_excel(EXCEL_SOURCE, sheet_name="User Matrix | THP Core")
     df.columns = [c.strip() for c in df.columns]
     df["Function"] = df["Function"].ffill()
@@ -41,10 +48,10 @@ def load_nav_matrix() -> dict:
     nav = {}
     for _, row in df.iterrows():
         func  = str(row.get("Function", "")).strip()
-        # Column index 2 = "Unnamed: 2" = app name for Super Admin
         app_raw = str(row.iloc[2]).strip()
-        # Some cells have multi-line app paths e.g. "Point of Sale\nAccounting/..."
         primary_app = app_raw.split("\n")[0].strip()
         if func and primary_app and primary_app != "nan":
             nav[func] = {"app": primary_app, "full_path": app_raw}
+
+    _nav_cache = nav
     return nav
