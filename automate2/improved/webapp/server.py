@@ -199,6 +199,13 @@ _latest_live_frame = {"image": "", "tc_id": "", "label": "Idle", "ts": 0}
 def api_live_frame():
     return jsonify(_latest_live_frame)
 
+def _safe_str(val) -> str:
+    if isinstance(val, pd.Series):
+        val = val.iloc[0] if len(val) > 0 else ""
+    if val is None or pd.isna(val):
+        return ""
+    return str(val).strip()
+
 # ── Live screenshot capture helper ───────────────────────────────────────────
 def _capture_live_frame(page, tc_id, label="live"):
     if not page:
@@ -241,20 +248,21 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
                 if _state["stop"]:
                     break
 
-                tc_id    = str(row["TC ID"]).strip() if pd.notna(row["TC ID"]) else ""
-                role     = str(row["Role"]).strip() if pd.notna(row["Role"]) else ""
-                func     = str(row["Function"]).strip() if pd.notna(row["Function"]) else ""
-                ptype    = str(row["Permission Type"]).strip() if pd.notna(row["Permission Type"]) else ""
-                expected = str(row.get("ผลที่คาดหวัง", "")).strip() if pd.notna(row.get("ผลที่คาดหวัง")) else ""
-                step     = str(row.get("ขั้นตอนทดสอบ", "")).strip() if pd.notna(row.get("ขั้นตอนทดสอบ")) else ""
+                tc_id    = _safe_str(row.get("TC ID"))
+                role     = _safe_str(row.get("Role"))
+                func     = _safe_str(row.get("Function"))
+                ptype    = _safe_str(row.get("Permission Type"))
+                expected = _safe_str(row.get("ผลที่คาดหวัง"))
+                step     = _safe_str(row.get("ขั้นตอนทดสอบ"))
 
                 nav_info = nav.get(func, {}) if isinstance(nav, dict) else {}
                 app_name = nav_info.get("app", func) if isinstance(nav_info, dict) else func
-                app_name_str = str(app_name or "")
+                app_name_str = _safe_str(app_name)
                 for key in ["Point of Sale","Sales","Accounting","Purchase",
                             "Inventory","Request","Fleet","MPOS","Contacts","Settings"]:
                     if key.lower() in app_name_str.lower():
                         app_name = key; break
+
 
 
 
