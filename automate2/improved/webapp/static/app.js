@@ -473,8 +473,11 @@ async function handleCellEdit(key, field, newValue) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tc_id: row['TC ID'], role: row['Role'], ptype: row['Permission Type'], field, value: val })
       });
-      await loadAllTestCases(true);
-      await updateMatchingCount();
+      // Update cache silently without re-expanding table
+      if (S.allCases) {
+        const c = S.allCases.find(r => `${r['TC ID']}||${r['Role']}||${r['Permission Type']}` === key);
+        if (c) c[field] = val;
+      }
     } catch {}
   }
 }
@@ -484,9 +487,9 @@ async function resetTest(key) {
   const row = S.rows.find(r => `${r['TC ID']}||${r['Role']}||${r['Permission Type']}` === key);
   if (!row) return;
   
-  if (!confirm(`Are you sure you want to reset and permanently delete the result for ${row['TC ID']}?`)) return;
+  if (!confirm(`Reset ${row['TC ID']}?`)) return;
   
-  log(`[RESET] Deleting result for ${row['TC ID']}...`, 'warn');
+  log(`[RESET] Resetting ${row['TC ID']}...`, 'warn');
   
   try {
     await fetch('/api/reset_row', {
@@ -495,18 +498,25 @@ async function resetTest(key) {
       body: JSON.stringify({ tc_id: row['TC ID'], role: row['Role'] })
     });
     
-    // Clear local state
+    // Clear local detail cache
     if (S.tcDetail[key]) delete S.tcDetail[key];
     
-    // Completely remove it from S.rows so the next match treats it as completely new
-    S.rows = S.rows.filter(r => `${r['TC ID']}||${r['Role']}||${r['Permission Type']}` !== key);
+    // Clear status in S.rows in-place (show as Pending, keep row visible)
+    const idx = S.rows.findIndex(r => `${r['TC ID']}||${r['Role']}||${r['Permission Type']}` === key);
+    if (idx >= 0) {
+      S.rows[idx] = { ...S.rows[idx], Status: '', Comments: '', Screenshot: '', Elapsed: '', _queuedIndex: null };
+    }
     
-    // Force a re-match to pull it cleanly as Pending again
-    await updateMatchingCount();
+    // Also clear in allCases cache
+    if (S.allCases) {
+      const c = S.allCases.find(r => `${r['TC ID']}||${r['Role']}||${r['Permission Type']}` === key);
+      if (c) { c.Status = ''; c.Comments = ''; c.Screenshot = ''; c.Elapsed = ''; }
+    }
     
-    log(`[RESET] ${row['TC ID']} has been wiped and reset to Pending.`, 'info');
+    renderTable();
+    log(`[RESET] ${row['TC ID']} reset to Pending.`, 'info');
   } catch (err) {
-    log(`[RESET ERROR] Failed to reset ${row['TC ID']}: ${err}`, 'fail');
+    log(`[RESET ERROR] ${err}`, 'fail');
   }
 }
 
@@ -678,21 +688,18 @@ function setRunUI(running) {
 async function syncCurrentEdits() {
   const syncBtn = document.getElementById('btn-sync-report');
   const oldTxt  = syncBtn ? syncBtn.textContent : 'Save & Sync';
-  if (syncBtn) syncBtn.textContent = 'Syncing Excel...';
+  if (syncBtn) { syncBtn.textContent = 'Saving...'; syncBtn.disabled = true; }
 
   try {
     const res = await fetch('/api/save_report', { method: 'POST' }).then(r => r.json());
-    // Force re-fetch from server to immediately reflect all saved Excel changes
-    await loadAllTestCases(true);
-    await updateMatchingCount();
-    log(`[SYNC] Saved and synced edits to current report file (${res.count||0} records)`, 'ok');
+    log(`[SYNC] Saved ${res.count||0} records to Excel.`, 'ok');
     if (syncBtn) {
-      syncBtn.textContent = 'Synced to test_results.xlsx';
-      setTimeout(() => { syncBtn.textContent = oldTxt; }, 2200);
+      syncBtn.textContent = 'Saved!';
+      setTimeout(() => { syncBtn.textContent = oldTxt; syncBtn.disabled = false; }, 2000);
     }
   } catch (err) {
-    log(`[SYNC ERROR] Failed to sync edits: ${err}`, 'fail');
-    if (syncBtn) syncBtn.textContent = oldTxt;
+    log(`[SYNC ERROR] ${err}`, 'fail');
+    if (syncBtn) { syncBtn.textContent = oldTxt; syncBtn.disabled = false; }
   }
 }
 
