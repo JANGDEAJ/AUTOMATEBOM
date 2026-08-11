@@ -31,20 +31,46 @@ _state = {
     "latest_ss": None,
 }
 
+_active_browser = None
+_active_ctx = None
+_active_page = None
+_ctx_lock = threading.Lock()
+
 def _restore_state():
     try:
         from config import REPORT_FILE
+        from loader import load_testcases
+        master_df = load_testcases().fillna("")
+        master_map = {}
+        for _, r in master_df.iterrows():
+            key = f"{r.get('TC ID')}||{r.get('Role')}||{r.get('Permission Type')}"
+            master_map[key] = r.to_dict()
+
         if os.path.exists(REPORT_FILE):
-            df = pd.read_excel(REPORT_FILE, sheet_name="Results")
-            df = df.fillna("")
-            res = df.to_dict(orient="records")
-            _state["results"] = res
-            _state["total"] = len(res)
-            _state["done"] = len(res)
-            _state["pass"] = sum(1 for r in res if r.get("Status") == "Passed")
-            _state["fail"] = sum(1 for r in res if r.get("Status") == "Failed")
-            _state["skip"] = sum(1 for r in res if r.get("Status") == "Skipped")
-            print(f"[RESTORE] Restored {len(res)} results from {REPORT_FILE}")
+            df = pd.read_excel(REPORT_FILE, sheet_name="Results").fillna("")
+            for _, r in df.iterrows():
+                st = str(r.get("Status", "")).strip()
+                key = f"{r.get('TC ID')}||{r.get('Role')}||{r.get('Permission Type')}"
+                if key in master_map:
+                    if st and st != "nan":
+                        master_map[key]["Status"] = st
+                    if r.get("Comments") and str(r.get("Comments")) != "nan":
+                        master_map[key]["Comments"] = r.get("Comments")
+                    if r.get("Screenshot") and str(r.get("Screenshot")) != "nan":
+                        master_map[key]["Screenshot"] = r.get("Screenshot")
+                    if r.get("Elapsed") and str(r.get("Elapsed")) != "nan":
+                        master_map[key]["Elapsed"] = r.get("Elapsed")
+                    if r.get("App") and str(r.get("App")) != "nan":
+                        master_map[key]["App"] = r.get("App")
+
+        res = list(master_map.values())
+        _state["results"] = res
+        _state["total"] = len(res)
+        _state["done"] = sum(1 for r in res if r.get("Status"))
+        _state["pass"] = sum(1 for r in res if r.get("Status") == "Passed")
+        _state["fail"] = sum(1 for r in res if r.get("Status") == "Failed")
+        _state["skip"] = sum(1 for r in res if r.get("Status") == "Skipped")
+        print(f"[RESTORE] Restored {len(res)} results from {REPORT_FILE} (Passed: {_state['pass']}, Failed: {_state['fail']})")
     except Exception as e:
         print(f"[RESTORE ERROR] {e}")
 
@@ -59,10 +85,6 @@ def _shutdown_save():
     except Exception as e:
         print(f"[SHUTDOWN SAVE ERROR] {e}")
 atexit.register(_shutdown_save)
-
-_active_ctx = None
-_active_page = None
-_ctx_lock = threading.Lock()
 
 _sse_queues: dict[str, queue.Queue] = {}
 _sse_lock = threading.Lock()
@@ -156,17 +178,23 @@ def api_run():
 
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
-    global _active_ctx, _active_page
+    global _active_browser, _active_ctx, _active_page
     _state["stop"] = True
+    _state["running"] = False
     with _ctx_lock:
+        if _active_page:
+            try: _active_page.close()
+            except Exception: pass
         if _active_ctx:
-            try:
-                _active_ctx.close()
-            except Exception:
-                pass
-            _active_ctx = None
-            _active_page = None
-    _broadcast("run_stopped", {"done": _state["done"]})
+            try: _active_ctx.close()
+            except Exception: pass
+        if _active_browser:
+            try: _active_browser.close()
+            except Exception: pass
+        _active_ctx = None
+        _active_page = None
+        _active_browser = None
+    _broadcast("run_stopped", {"done": _state.get("done", 0)})
     return jsonify({"status": "stopped_immediately"})
 
 @app.route("/api/results")
@@ -184,7 +212,6 @@ def api_update_row():
     
     updated = False
     for r in _state.get("results", []):
-        # Match by TC ID, Role, and Permission Type (if provided)
         match_ptype = (not ptype) or (r.get("Permission Type") == ptype)
         if r.get("TC ID") == tc_id and r.get("Role") == role and match_ptype:
             r[field] = value
@@ -192,7 +219,6 @@ def api_update_row():
             break
             
     if not updated:
-        # Row not in _state["results"] yet (e.g. editing a pending case), pull base row and insert
         try:
             df = load_testcases()
             match = df[(df["TC ID"] == tc_id) & (df["Role"] == role)]
@@ -221,23 +247,21 @@ def api_reset_row():
     tc_id = body.get("tc_id")
     role = body.get("role")
     
-    deleted = False
-    new_results = []
-    
+    reset_found = False
     for r in _state.get("results", []):
-        if r.get("TC ID") == tc_id and r.get("Role") == role:
-            deleted = True
+        if r.get("TC ID") == tc_id and (not role or r.get("Role") == role):
+            reset_found = True
             st = r.get("Status")
             if st == "Passed": _state["pass"] = max(0, _state["pass"] - 1)
             elif st == "Failed": _state["fail"] = max(0, _state["fail"] - 1)
             elif st == "Skipped": _state["skip"] = max(0, _state["skip"] - 1)
             _state["done"] = max(0, _state["done"] - 1)
-            _state["total"] = max(0, _state["total"] - 1)
-        else:
-            new_results.append(r)
+            r["Status"] = ""
+            r["Comments"] = ""
+            r["Elapsed"] = ""
+            r["Screenshot"] = ""
             
-    if deleted:
-        _state["results"] = new_results
+    if reset_found:
         try: save_report(_state["results"])
         except Exception as e: print(f"[RESET ROW ERROR] {e}")
         return jsonify({"status": "reset", "tc_id": tc_id})
@@ -248,6 +272,16 @@ def api_reset_row():
 def api_save_report():
     if _state.get("results"):
         save_report(_state["results"])
+        import shutil
+        from config import REPORT_FILE
+        dsts = [
+            r'c:\Users\gaykn\Downloads\automate2\AUTOMATEBOM\automate2\test_results.xlsx',
+            r'c:\Users\gaykn\Downloads\automate2\AUTOMATEBOM\automate2\improved\reports\test_results.xlsx',
+            r'c:\Users\gaykn\Downloads\automate2\AUTOMATEBOM\test_results.xlsx'
+        ]
+        for d in dsts:
+            if os.path.exists(os.path.dirname(d)):
+                shutil.copy(REPORT_FILE, d)
         return jsonify({"status": "saved", "count": len(_state["results"])})
     return jsonify({"status": "empty", "count": 0})
 
@@ -342,6 +376,8 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
 
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=headless)
+            with _ctx_lock:
+                _active_browser = browser
 
             for _, row in df.iterrows():
                 if _state["stop"]:

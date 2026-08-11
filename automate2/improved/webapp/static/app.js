@@ -636,8 +636,12 @@ async function retryFailed() {
 
 function stopRun() {
   log('[STOP] Requesting instant stop...', 'warn');
-  updateMonitorBadge('STOPPING...', 'Closing browser session');
+  updateMonitorBadge('STOPPED', 'Closing browser session');
   fetch('/api/stop', { method: 'POST' });
+  S.running = false;
+  setRunUI(false);
+  stopTimer();
+  stopLivePoll();
 }
 
 // ── Visible Browser Pop-Out Test ────────────────────────────────────────────
