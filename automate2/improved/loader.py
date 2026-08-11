@@ -34,27 +34,39 @@ def load_testcases(permission_types=None, roles=None, limit=None, force_reload=F
             
         df["App"] = df["Function"].apply(resolve_app)
         
-        # Split Super Admin and Admin into HQ and Branch (สาขา)
-        split_roles = {
-            "Super Admin": ["Super Admin (HQ)", "Super Admin (สาขา)"],
-            "Admin": ["Admin (HQ)", "Admin (สาขา)"]
-        }
+        # Branch Functions (สาขา)
+        branch_functions = [
+            "การขายสินค้าและบริการเงินสด (ขายสด)",
+            "การขายสินค้าและบริการ (ขายเชื่อ)",
+            "การปรับปรุงรายการรับชำระค่าบริการ/สินค้า",
+            "การจัดทำใบลดหนี้ราคา กรณีขายสินค้า/บริการ",
+            "การจัดทำใบเพิ่มหนี้",
+            "การจัดทำใบเสนอราคา",
+            "การจัดทำใบแจ้งหนี้",
+            "การจัดทำใบวางบิล",
+            "การคำนวณค่า Commission",
+            "การจัดทำเงินรับล่วงหน้า (ธุรกิจตอบรับ)",
+            "การตั้งหรือเพิ่มวงเงินสดย่อย",
+            "การขอเบิกเงินสดย่อย",
+            "การขอเบิกชดเชยเงินสดย่อย",
+            "การขอเบิกค่าใช้จ่ายต่าง ๆ (Expense)",
+            "การบริหารภาษีหัก ณ ที่จ่าย",
+            "การเงินยืมระหว่างสาขา/ที่ทำการ",
+            "การคืนเงินยืมระหว่างสาขา/ที่ทำการ",
+            "การกระทบยอด เรียกเก็บค่าอากรพัสดุต่างประเทศ กรมศุลกากร",
+            "การจัดทำวางเงินประกันสัญญา",
+            "การจัดทำวางเงินประกันไปเช่าพื้นที่/อาคาร"
+        ]
         
-        new_rows = []
-        for _, row in df.iterrows():
-            r = str(row.get("Role", ""))
-            if r in split_roles:
-                for new_role in split_roles[r]:
-                    new_row = row.copy()
-                    new_row["Role"] = new_role
-                    # Make TC ID unique by appending suffix
-                    suffix = "_HQ" if "HQ" in new_role else "_Branch"
-                    new_row["TC ID"] = str(new_row["TC ID"]) + suffix
-                    new_rows.append(new_row)
-            else:
-                new_rows.append(row)
-                
-        df = pd.DataFrame(new_rows)
+        def assign_hq_branch(row):
+            role = str(row.get("Role", ""))
+            func = str(row.get("Function", "")).strip()
+            if role in ["Super Admin", "Admin"]:
+                suffix = " (สาขา)" if func in branch_functions else " (HQ)"
+                return role + suffix
+            return role
+            
+        df["Role"] = df.apply(assign_hq_branch, axis=1)
         
         _tc_cache = df
 
