@@ -34,6 +34,28 @@ def load_testcases(permission_types=None, roles=None, limit=None, force_reload=F
             
         df["App"] = df["Function"].apply(resolve_app)
         
+        # Split Super Admin and Admin into HQ and Branch (สาขา)
+        split_roles = {
+            "Super Admin": ["Super Admin (HQ)", "Super Admin (สาขา)"],
+            "Admin": ["Admin (HQ)", "Admin (สาขา)"]
+        }
+        
+        new_rows = []
+        for _, row in df.iterrows():
+            r = str(row.get("Role", ""))
+            if r in split_roles:
+                for new_role in split_roles[r]:
+                    new_row = row.copy()
+                    new_row["Role"] = new_role
+                    # Make TC ID unique by appending suffix
+                    suffix = "_HQ" if "HQ" in new_role else "_Branch"
+                    new_row["TC ID"] = str(new_row["TC ID"]) + suffix
+                    new_rows.append(new_row)
+            else:
+                new_rows.append(row)
+                
+        df = pd.DataFrame(new_rows)
+        
         _tc_cache = df
 
     df = _tc_cache.copy()

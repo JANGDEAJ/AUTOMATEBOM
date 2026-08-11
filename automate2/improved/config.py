@@ -16,9 +16,11 @@ IDM_PASSWORD = "THPCore@2024"
 
 # Role Credentials (Stage 2 Odoo login)
 ROLE_CREDENTIALS = {
-    "Super Admin":    {"username": "uat.super_admin",  "password": "Uat@super_admin#2026"},
-    "Admin":          {"username": "uat.admin",         "password": "Uat@admin#2026"},
-    "Supervisor":     {"username": "uat.supervisor",    "password": "Uat@supervisor#2026"},
+    "Super Admin (HQ)":   {"username": "uat.super_admin",  "password": "Uat@super_admin#2026"},
+    "Super Admin (สาขา)": {"username": "uat.super_admin",  "password": "Uat@super_admin#2026"},
+    "Admin (HQ)":         {"username": "uat.admin",         "password": "Uat@admin#2026"},
+    "Admin (สาขา)":       {"username": "uat.admin",         "password": "Uat@admin#2026"},
+    "Supervisor":         {"username": "uat.supervisor",    "password": "Uat@supervisor#2026"},
     "Super User":     {"username": "uat.super_user",    "password": "Uat@super_user#2026"},
     "User(Cashier)":  {"username": "uat.user",          "password": "Uat@user#2026"},
     "Outsource":      {"username": "uat.outsource",     "password": "Uat@outsource#2026"},
