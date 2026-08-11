@@ -92,6 +92,19 @@ def api_testcases():
         df    = df.fillna("")
         cols  = [c for c in ["TC ID","Module","Function","App","Role","Permission Type","ขั้นตอนทดสอบ","ผลที่คาดหวัง"] if c in df.columns]
         rows  = df[cols].to_dict(orient="records")
+        
+        # Merge existing results from state so refresh doesn't wipe them
+        result_map = {f"{r.get('TC ID')}||{r.get('Role')}||{r.get('Permission Type')}": r for r in _state.get("results", [])}
+        for row in rows:
+            key = f"{row.get('TC ID')}||{row.get('Role')}||{row.get('Permission Type')}"
+            if key in result_map:
+                cached = result_map[key]
+                row["Status"] = cached.get("Status", "")
+                row["Comments"] = cached.get("Comments", "")
+                row["Elapsed"] = cached.get("Elapsed", "")
+                row["Screenshot"] = cached.get("Screenshot", "")
+                if cached.get("Function"): row["Function"] = cached.get("Function")
+                
         return jsonify({"total": len(rows), "rows": rows})
     except Exception as e:
         print(f"[API TESTCASES ERROR] {e}", file=sys.stderr)
