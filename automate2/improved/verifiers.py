@@ -12,10 +12,10 @@ from config import SEL_APP_DRAWER, APP_ALIASES, DASHBOARD_URL
 
 APP_CREATE_BUTTONS = {
     'Point of Sale': [
-        'button:has-text("New Session")', 'button:has-text("เปิดเซสชัน")', 'button:has-text("Open")',
+        'button:has-text("New Session")', 'button:has-text("เปิดเซสชัน")',
         'button:has-text("New")', 'button:has-text("สร้าง")', 'button:has-text("สร้างใหม่")',
-        'button:has-text("เพิ่ม")', 'button:has-text("เปิด")', 'a:has-text("New")', 'a:has-text("สร้าง")',
-        'a:has-text("เปิดเซสชัน")', '.o_list_button_add', '.o_btn_new', 'button.btn-primary'
+        'a:has-text("New")', 'a:has-text("สร้าง")', 'a:has-text("เปิดเซสชัน")',
+        '.o_list_button_add', '.o_btn_new'
     ],
     'Sales': ['button:has-text("New")', 'button:has-text("สร้าง")', 'button:has-text("สร้างใหม่")', 'a:has-text("New")', 'a:has-text("สร้าง")', '.o_list_button_add'],
     'Accounting': ['button:has-text("New")', 'button:has-text("สร้าง")', 'button:has-text("สร้างใหม่")', 'a:has-text("New")', 'a:has-text("สร้าง")', '.o_list_button_add'],
