@@ -19,6 +19,21 @@ def load_testcases(permission_types=None, roles=None, limit=None, force_reload=F
     if _tc_cache is None or force_reload:
         df = pd.read_excel(EXCEL_SOURCE, sheet_name="BOM_Role_TestCases")
         df.columns = [c.strip() for c in df.columns]
+        
+        # Inject App column mapping using the nav matrix
+        nav = load_nav_matrix(force_reload)
+        def resolve_app(func):
+            app_raw = nav.get(str(func).strip(), {}).get("app", "")
+            app_name = str(app_raw).strip()
+            # Normalize to short keys if possible
+            for key in ["Point of Sale","Sales","Accounting","Purchase",
+                        "Inventory","Request","Fleet","MPOS","Contacts","Settings"]:
+                if key.lower() in app_name.lower():
+                    return key
+            return app_name if app_name and app_name != "nan" else func
+            
+        df["App"] = df["Function"].apply(resolve_app)
+        
         _tc_cache = df
 
     df = _tc_cache.copy()
@@ -43,12 +58,16 @@ def load_nav_matrix(force_reload=False) -> dict:
 
     df = pd.read_excel(EXCEL_SOURCE, sheet_name="User Matrix | THP Core")
     df.columns = [c.strip() for c in df.columns]
+    
+    # Forward-fill Function and App columns
     df["Function"] = df["Function"].ffill()
+    app_col = "Unnamed: 2" if "Unnamed: 2" in df.columns else df.columns[2]
+    df[app_col] = df[app_col].ffill()
 
     nav = {}
     for _, row in df.iterrows():
         func  = str(row.get("Function", "")).strip()
-        app_raw = str(row.iloc[2]).strip()
+        app_raw = str(row.get(app_col, "")).strip()
         primary_app = app_raw.split("\n")[0].strip()
         if func and primary_app and primary_app != "nan":
             nav[func] = {"app": primary_app, "full_path": app_raw}

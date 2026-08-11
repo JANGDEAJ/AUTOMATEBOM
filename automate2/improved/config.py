@@ -24,18 +24,21 @@ ROLE_CREDENTIALS = {
     "Outsource":      {"username": "uat.outsource",     "password": "Uat@outsource#2026"},
 }
 
-# App Grid Name Aliases (Thai UI may differ from English name in User Matrix)
+# App Grid Name Aliases (Thai UI & English names in User Matrix)
 APP_ALIASES = {
-    "Point of Sale": ["Point of Sale", "Sessions"],
-    "Sales":         ["Sales"],
-    "Accounting":    ["Accounting"],
-    "Purchase":      ["Purchase"],
-    "Inventory":     ["Inventory"],
-    "Request":       ["Request", "Expenses", "My Expenses"],
-    "Fleet":         ["Fleet"],
-    "MPOS":          ["MPOS"],
-    "Contacts":      ["Contacts"],
-    "Settings":      ["Settings"],
+    "Point of Sale": ["การขายหน้าร้าน", "Point of Sale", "Sessions", "รายการขาย"],
+    "Sales":         ["การขาย", "Sales", "คำสั่งขาย/สั่งจอง"],
+    "Accounting":    ["การบัญชี", "Accounting", "การเงิน"],
+    "Purchase":      ["การจัดซื้อ", "Purchase"],
+    "Inventory":     ["คลังสินค้า", "Inventory"],
+    "Request":       ["การเบิกค่าใช้จ่าย", "Request", "Expenses", "My Expenses"],
+    "Fleet":         ["การขนส่ง", "Fleet", "ยานพาหนะ", "พรบ."],
+    "MPOS":          ["MPOS", "ข้อมูลปณอ."],
+    "Contacts":      ["การติดต่อ", "Contacts"],
+    "Settings":      ["การตั้งค่า", "Settings"],
+    "Interface":     ["Interface"],
+    "Contract":      ["การบริหารสัญญา"],
+    "Report":        ["รายงานระดับเขต/นครหลวง", "รายงาน"],
 }
 
 # Expected-Result Keywords per permission type
@@ -73,9 +76,10 @@ SETTING_BUTTON_SELECTORS   = ["a.main_link:has-text('Settings')", "a:has-text('C
 
 # Paths
 BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
+AUTOMATEBOM_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", ".."))
 EXCEL_SOURCE   = os.path.join(BASE_DIR, "..", "BOM_Role_TestCases_Accounting_Finance.xlsx")
-REPORT_DIR     = os.path.join(BASE_DIR, "reports")
-SCREENSHOT_DIR = os.path.join(BASE_DIR, "screenshots")
+REPORT_DIR     = os.path.join(AUTOMATEBOM_DIR, "reports")
+SCREENSHOT_DIR = os.path.join(AUTOMATEBOM_DIR, "screenshots")
 REPORT_FILE    = os.path.join(REPORT_DIR, "test_results.xlsx")
 
 # Browser

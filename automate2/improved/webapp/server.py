@@ -1,14 +1,14 @@
 """
 server.py - BOM UAT Automation Dashboard (Flask + SSE + Live View + Fast Interrupt)
 """
-import sys, os, json, queue, threading, traceback, time, uuid, base64
+import sys, os, json, queue, threading, traceback, time, uuid, base64, asyncio
 import pandas as pd
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from flask import Flask, Response, request, jsonify, send_from_directory
 from playwright.sync_api import sync_playwright
-from config import SCREENSHOT_DIR, REPORT_DIR, ROLE_CREDENTIALS
+from config import SCREENSHOT_DIR, REPORT_DIR, ROLE_CREDENTIALS, DASHBOARD_URL
 from loader import load_testcases, load_nav_matrix
 from login import login
 from verifiers import run_verification
@@ -31,6 +31,25 @@ _state = {
     "latest_ss": None,
 }
 
+def _restore_state():
+    try:
+        from config import REPORT_FILE
+        if os.path.exists(REPORT_FILE):
+            df = pd.read_excel(REPORT_FILE, sheet_name="Results")
+            df = df.fillna("")
+            res = df.to_dict(orient="records")
+            _state["results"] = res
+            _state["total"] = len(res)
+            _state["done"] = len(res)
+            _state["pass"] = sum(1 for r in res if r.get("Status") == "Passed")
+            _state["fail"] = sum(1 for r in res if r.get("Status") == "Failed")
+            _state["skip"] = sum(1 for r in res if r.get("Status") == "Skipped")
+            print(f"[RESTORE] Restored {len(res)} results from {REPORT_FILE}")
+    except Exception as e:
+        print(f"[RESTORE ERROR] {e}")
+
+_restore_state()
+
 _active_ctx = None
 _active_page = None
 _ctx_lock = threading.Lock()
@@ -42,7 +61,7 @@ try:
     load_testcases()
     load_nav_matrix()
 except Exception as e:
-    print(f"Loader cache pre-warm warning: {e}", sys.stderr)
+    print(f"Loader cache pre-warm warning: {e}", file=sys.stderr)
 
 
 def _broadcast(event_type: str, data: dict):
@@ -75,7 +94,7 @@ def api_testcases():
         rows  = df[cols].to_dict(orient="records")
         return jsonify({"total": len(rows), "rows": rows})
     except Exception as e:
-        print(f"[API TESTCASES ERROR] {e}", sys.stderr)
+        print(f"[API TESTCASES ERROR] {e}", file=sys.stderr)
         return jsonify({"error": str(e), "total": 0, "rows": []}), 500
 
 
@@ -103,7 +122,7 @@ def api_run():
         perm_types = None; roles = None; limit = None
 
     _state.update(running=True, stop=False, results=[], total=0,
-                  done=0, pass_=0, fail=0, skip=0, run_id=str(uuid.uuid4())[:8], latest_ss=None)
+                  done=0, fail=0, skip=0, run_id=str(uuid.uuid4())[:8], latest_ss=None)
     _state["pass"] = 0
 
     threading.Thread(
@@ -227,6 +246,8 @@ def _capture_live_frame(page, tc_id, label="live"):
 # ── Worker ────────────────────────────────────────────────────────────────────
 def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
     global _active_ctx, _active_page
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
     os.makedirs(REPORT_DIR, exist_ok=True)
     try:
@@ -281,7 +302,7 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
                     with _ctx_lock:
                         if _active_ctx:
                             try: _active_ctx.close()
-                            except: pass
+                            except Exception: pass
                     try:
                         def make_cb(tc_id_val):
                             def cb(page, label):
@@ -331,7 +352,7 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
                     if _active_page:
                         _active_page.screenshot(path=ss_path)
                         _capture_live_frame(_active_page, tc_id, label=f"PROOF [{status}]")
-                except:
+                except Exception:
                     ss_name = ""
 
                 # Proof freeze delay: keep broadcasting live frame so user sees proof picture hold
@@ -346,11 +367,10 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
 
                 # Reset to dashboard
                 try:
-                    from config import DASHBOARD_URL
                     if _active_page:
                         _active_page.goto(DASHBOARD_URL, wait_until="domcontentloaded")
                         _active_page.wait_for_timeout(400)
-                except: pass
+                except Exception: pass
 
                 if   status == "Passed":  _state["pass"] += 1
                 elif status == "Failed":  _state["fail"] += 1
@@ -375,7 +395,7 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
             with _ctx_lock:
                 if _active_ctx:
                     try: _active_ctx.close()
-                    except: pass
+                    except Exception: pass
                 _active_ctx = None
                 _active_page = None
 
@@ -391,12 +411,17 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
             _broadcast("run_complete", {"done": _state["done"], "total": total,
                                         "pass": _state["pass"], "fail": _state["fail"]})
     except Exception as e:
+        print(f"[RUN WORKER EXCEPTION] {traceback.format_exc()}", file=sys.stderr)
         _broadcast("run_error", {"error": traceback.format_exc()[:500]})
     finally:
         _state["running"] = False
         with _ctx_lock:
             _active_ctx = None
             _active_page = None
+        try:
+            loop.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

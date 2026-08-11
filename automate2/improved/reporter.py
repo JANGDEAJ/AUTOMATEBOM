@@ -8,10 +8,9 @@ from openpyxl import load_workbook
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from datetime import datetime
-from config import REPORT_DIR, REPORT_FILE
-
-ALT_REPORT_FILE_1 = os.path.abspath(os.path.join(REPORT_DIR, "..", "..", "test_results.xlsx"))
-ALT_REPORT_FILE_2 = os.path.abspath(os.path.join(REPORT_DIR, "..", "..", "..", "test_results.xlsx"))
+from openpyxl.drawing.image import Image as ExcelImage
+import PIL.Image
+from config import REPORT_DIR, REPORT_FILE, SCREENSHOT_DIR
 
 
 # Colour fills
@@ -59,17 +58,51 @@ def save_report(results: list[dict]):
         cell.border = _THIN
         cell.alignment = Alignment(horizontal="center", wrap_text=True)
 
-    # Data rows
+    # Data rows and images
     status_col = df.columns.get_loc("Status") + 1
-    for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+    screenshot_col = df.columns.get_loc("Screenshot") + 1 if "Screenshot" in df.columns else None
+
+    if screenshot_col:
+        ws.column_dimensions[get_column_letter(screenshot_col)].width = 25
+
+    for idx, row in enumerate(ws.iter_rows(min_row=2, max_row=ws.max_row), start=2):
         status_val = row[status_col - 1].value or ""
         fill = _GREEN if status_val == "Passed" else (_RED if status_val == "Failed" else _YELLOW)
         for cell in row:
             cell.border    = _THIN
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
+            cell.alignment = Alignment(wrap_text=True, vertical="center")
         row[status_col - 1].fill = fill
 
+        # Handle screenshot embedding
+        if screenshot_col:
+            ws.row_dimensions[idx].height = 100  # Adjust row height for image
+            ss_val = row[screenshot_col - 1].value
+            if ss_val:
+                ss_path = str(ss_val)
+                if not os.path.isabs(ss_path):
+                    ss_path = os.path.join(SCREENSHOT_DIR, ss_path)
+                
+                if os.path.exists(ss_path):
+                    try:
+                        # Keep text for pandas, but make it invisible
+                        row[screenshot_col - 1].font = Font(color="FFFFFF")
+                        # Add image
+                        img = ExcelImage(ss_path)
+                        # Scale down image to fit cell (approx 130px height)
+                        img.height = 125
+                        img.width = 125 * (img.width / img.height) # maintain aspect ratio
+                        
+                        # Anchor image to the cell
+                        cell_ref = f"{get_column_letter(screenshot_col)}{idx}"
+                        ws.add_image(img, cell_ref)
+                    except Exception as e:
+                        row[screenshot_col - 1].value = f"Img Error: {str(e)}"
+                else:
+                    row[screenshot_col - 1].value = "Image not found"
+
     _autofit(ws)
+    if screenshot_col:
+        ws.column_dimensions[get_column_letter(screenshot_col)].width = 25 # Ensure width again after autofit
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
 
@@ -106,15 +139,9 @@ def save_report(results: list[dict]):
         ws_sum.append([role, len(grp), p, f])
 
     ws_sum["A1"].font = Font(bold=True, size=14)
-    for col in ws_sum.columns:
-        max_len = max((len(str(c.value or "")) for c in col), default=0)
-        ws_sum.column_dimensions[get_column_letter(col[0].column)].width = min(max_len + 4, 50)
+    _autofit(ws_sum)
 
     wb.save(REPORT_FILE)
-    try: wb.save(ALT_REPORT_FILE_1)
-    except Exception: pass
-    try: wb.save(ALT_REPORT_FILE_2)
-    except Exception: pass
 
     print(f"\n Report saved -> {REPORT_FILE}")
     print(f"   Total: {total}  Passed: {passed}  Failed: {failed}  Skipped: {skipped}")
