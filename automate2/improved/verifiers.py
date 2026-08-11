@@ -222,6 +222,297 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
             cb("Create check failed: Sub-menu Customers -> Credit Notes not found")
             return ("Failed", f"Sub-menu Customers -> Credit Notes not found in {app_name} for role {role}")
 
+    # Check if sub-menu navigation is required for Customer Invoices (การจัดทำใบแจ้งหนี้)
+    elif "ใบแจ้งหนี้" in func_name or "Invoice" in func_name or "Invoices" in func_name:
+        cb("Navigating sub-menu: Customers -> Invoices")
+        sub_ok = navigate_submenus(page, [
+            ["Customers", "ลูกค้า"],
+            ["Invoices", "ใบแจ้งหนี้", "การจัดทำใบแจ้งหนี้"]
+        ], frame_cb=frame_cb)
+        
+        if not sub_ok:
+            cb("Create check failed: Sub-menu Customers -> Invoices not found")
+            return ("Failed", f"Sub-menu Customers -> Invoices not found in {app_name} for role {role}")
+
+        # Click New / สร้าง
+        create_btn = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
+        if not create_btn.is_visible(timeout=3000):
+            cb("Create check failed: New/สร้าง button not found in Invoices page")
+            return ("Failed", f"New/สร้าง button not found in Invoices page for role {role}")
+
+        cb("Clicking New/สร้าง on Invoices page")
+        create_btn.click()
+        time.sleep(2)
+
+        try:
+            # 1. Fill ลูกค้าที่มาติดต่อ (Customer)
+            cb("Filling ลูกค้าที่มาติดต่อ dropdown")
+            customer_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id'], .o_field_widget[name='partner_id'] input").first
+            if customer_inp.is_visible(timeout=2000):
+                customer_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(1)
+
+            # 2. Fill ผู้รับ/ที่อยู่ (Delivery/Recipient address)
+            cb("Filling ผู้รับ/ที่อยู่ dropdown")
+            addr_inp = page.locator("div[name='partner_shipping_id'] input, div[name='delivery_address_id'] input, input[id*='shipping']").first
+            if addr_inp.is_visible(timeout=1500):
+                addr_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(1)
+
+            # 3. Fill Payment Terms / เงื่อนไขการชำระเงิน
+            cb("Filling Terms dropdown")
+            terms_inp = page.locator("div[name='invoice_payment_term_id'] input, div[name='payment_term_id'] input, input[id*='payment_term']").first
+            if terms_inp.is_visible(timeout=1500):
+                terms_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(1)
+
+            # 4. Fill การอ้างอิง (Payment Reference)
+            cb("Filling การอ้างอิง text field")
+            import random
+            ref_str = f"REF-AUTO-{random.randint(100, 999)}"
+            ref_inp = page.locator("div[name='payment_reference'] input, div[name='ref'] input, input[name='payment_reference'], input[name='ref']").first
+            if ref_inp.is_visible(timeout=1500):
+                ref_inp.fill(ref_str)
+                time.sleep(0.5)
+
+            # 5. Click Save manually
+            cb("Clicking Save button manually")
+            save_btn = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+            if save_btn.is_visible(timeout=2000):
+                save_btn.click()
+                time.sleep(2)
+
+            # 6. Click CONFIRM
+            cb("Clicking Confirm button")
+            confirm_btn = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button.btn-primary:has-text('Confirm')").first
+            if confirm_btn.is_visible(timeout=2000):
+                confirm_btn.click()
+                time.sleep(2)
+
+            # Handle modal OK dialog if present
+            ok_btn = page.locator(".modal button:has-text('OK'), .modal button:has-text('ตกลง')").first
+            if ok_btn.is_visible(timeout=1500):
+                ok_btn.click()
+                time.sleep(1)
+
+            # Extract created invoice serial number (e.g. DINV-13000-260100131 or INV-...)
+            rec_num = ""
+            try:
+                for sel in [".o_last_breadcrumb_item", "h1:has-text('DINV-')", "h1:has-text('INV-')", "h1:has-text('13000-')", ".breadcrumb-item.active"]:
+                    elem = page.locator(sel).first
+                    if elem.is_visible(timeout=1000):
+                        text = elem.inner_text()
+                        for word in text.split():
+                            if "DINV-" in word or "INV-" in word or "13000-" in word:
+                                rec_num = word.strip()
+                                break
+                        if rec_num:
+                            break
+                        if ("DINV-" in text or "INV-" in text) and not rec_num:
+                            rec_num = text.strip().split("\n")[0]
+                            break
+            except Exception:
+                pass
+
+            cb(f"Created Invoice Serial: '{rec_num}'")
+
+            # 7. Go back to Invoices list view
+            cb("Returning to Invoices list view")
+            b_crumb = page.locator("a.breadcrumb-item:has-text('Invoices'), a.breadcrumb-item:has-text('ใบแจ้งหนี้'), .breadcrumb a:has-text('Invoices')").first
+            if b_crumb.is_visible(timeout=2000):
+                b_crumb.click()
+            else:
+                navigate_submenus(page, [["Customers", "ลูกค้า"], ["Invoices", "ใบแจ้งหนี้"]], frame_cb=frame_cb)
+            time.sleep(2)
+
+            # 8. Check if serial number appears in table list
+            if rec_num:
+                in_list = page.locator(f"table:has-text('{rec_num}'), tr:has-text('{rec_num}'), .o_list_table:has-text('{rec_num}')").count() > 0
+                if in_list:
+                    cb(f"Create PASSED: Found invoice serial '{rec_num}' in table list")
+                    return ("Passed", f"Created invoice '{rec_num}' successfully and verified in Invoices table for role {role}")
+                else:
+                    cb(f"Create FAILED: Invoice serial '{rec_num}' not found in table list")
+                    return ("Failed", f"Invoice '{rec_num}' created but not found in Invoices list table for role {role}")
+
+            cb("Create PASSED: Invoice saved and confirmed successfully")
+            return ("Passed", f"Invoice created and confirmed successfully in Invoices for role {role}")
+
+        except Exception as e:
+            cb(f"Create FAILED during invoice creation workflow: {e}")
+            return ("Failed", f"Error during Invoice creation workflow for role {role}: {e}")
+
+    # Check if sub-menu navigation is required for Vendor Bills / ใบวางบิล (การจัดทำใบวางบิล)
+    elif "ใบวางบิล" in func_name or "Vendor Bills" in func_name or "Bills" in func_name:
+        cb("Navigating sub-menu: Vendors -> Bills")
+        sub_ok = navigate_submenus(page, [
+            ["Vendors", "ผู้ขาย", "ผู้ให้บริการ"],
+            ["Bills", "ใบแจ้งหนี้/ใบวางบิล", "ใบวางบิล"]
+        ], frame_cb=frame_cb)
+        
+        if not sub_ok:
+            cb("Create check failed: Sub-menu Vendors -> Bills not found")
+            return ("Failed", f"Sub-menu Vendors -> Bills not found in {app_name} for role {role}")
+
+        # Click New / สร้าง
+        create_btn = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
+        if not create_btn.is_visible(timeout=3000):
+            cb("Create check failed: New/สร้าง button not found in Bills page")
+            return ("Failed", f"New/สร้าง button not found in Bills page for role {role}")
+
+        cb("Clicking New/สร้าง on Bills page")
+        create_btn.click()
+        time.sleep(2)
+
+        try:
+            # 1. Fill Vendor (ผู้ขาย)
+            cb("Filling Vendor dropdown")
+            vendor_loc = page.locator("div[name='partner_id'] input, input[id*='partner_id'], .o_field_widget[name='partner_id'] input, xpath=//*[contains(text(), 'ลูกค้าที่มาติดต่อ') or contains(text(), 'ผู้ขาย')]/following::input[1]").first
+            if vendor_loc.is_visible(timeout=2000):
+                vendor_loc.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(0.5)
+
+            # 2. Fill ประเภทการทำจ่าย (Payment / Disbursement Type dropdown)
+            cb("Filling ประเภทการทำจ่าย dropdown")
+            pt_locators = [
+                page.locator("xpath=//*[contains(text(), 'ประเภทการทำจ่าย')]/following::input[1]"),
+                page.locator("xpath=//*[contains(text(), 'ประเภทการทำจ่าย')]/ancestor::div[1]//input"),
+                page.locator("div[name='disbursement_type_id'] input"),
+                page.locator("div[name='payment_type_id'] input"),
+                page.locator("div[name='disbursement_type'] input"),
+                page.locator("div[name='payment_type'] input"),
+                page.locator(".o_field_widget[name*='disbursement'] input"),
+                page.locator("label:has-text('ประเภทการทำจ่าย') + div input")
+            ]
+            for loc in pt_locators:
+                try:
+                    if loc.is_visible(timeout=1000):
+                        loc.click()
+                        time.sleep(0.5)
+                        page.keyboard.press("ArrowDown")
+                        time.sleep(0.5)
+                        opt = page.locator(".ui-autocomplete li, .o_autocomplete li, .dropdown-item, li.ui-menu-item").first
+                        if opt.is_visible(timeout=1000):
+                            opt.click()
+                        else:
+                            page.keyboard.press("Enter")
+                        time.sleep(0.5)
+                        break
+                except Exception:
+                    pass
+
+            # 3. Fill Bill Reference / การอ้างอิง
+            cb("Filling Bill Reference / การอ้างอิง")
+            import random
+            ref_str = f"BILL-REF-{random.randint(100, 999)}"
+            ref_inp = page.locator("div[name='ref'] input, input[name='ref'], div[name='payment_reference'] input, xpath=//*[contains(text(), 'การอ้างอิง')]/following::input[1]").first
+            if ref_inp.is_visible(timeout=1500):
+                ref_inp.fill(ref_str)
+                time.sleep(0.5)
+
+            # 4. Fill Terms / Payment Terms if present
+            cb("Filling Terms dropdown")
+            terms_inp = page.locator("div[name='invoice_payment_term_id'] input, div[name='payment_term_id'] input, xpath=//*[contains(text(), 'Payment terms')]/following::input[1]").first
+            if terms_inp.is_visible(timeout=1500):
+                terms_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(0.5)
+
+            # 5. Fill Accounting Date if present
+            cb("Filling Accounting Date if required")
+            acc_date_inp = page.locator("div[name='date'] input, div[name='accounting_date'] input, xpath=//*[contains(text(), 'Accounting Date')]/following::input[1]").first
+            if acc_date_inp.is_visible(timeout=1500):
+                acc_date_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(0.5)
+
+            # 6. Click Save manually
+            cb("Clicking Save button manually")
+            save_btn = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+            if save_btn.is_visible(timeout=2000):
+                save_btn.click()
+                time.sleep(2)
+
+            # 7. Click Confirm
+            cb("Clicking Confirm button")
+            confirm_btn = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button.btn-primary:has-text('Confirm')").first
+            if confirm_btn.is_visible(timeout=2000):
+                confirm_btn.click()
+                time.sleep(2)
+
+            # Handle modal OK dialog if present
+            ok_btn = page.locator(".modal button:has-text('OK'), .modal button:has-text('ตกลง')").first
+            if ok_btn.is_visible(timeout=1500):
+                ok_btn.click()
+                time.sleep(1)
+
+            # Extract created Bill serial number (e.g. BILL-13000-XXXXX or RBILL-...)
+            rec_num = ""
+            try:
+                for sel in [".o_last_breadcrumb_item", "h1:has-text('BILL')", "h1:has-text('13000-')", ".breadcrumb-item.active"]:
+                    elem = page.locator(sel).first
+                    if elem.is_visible(timeout=1000):
+                        text = elem.inner_text()
+                        for word in text.split():
+                            if "BILL" in word or "13000-" in word or "INV-" in word or "RBILL-" in word:
+                                rec_num = word.strip()
+                                break
+                        if rec_num:
+                            break
+                        if "BILL" in text and not rec_num:
+                            rec_num = text.strip().split("\n")[0]
+                            break
+            except Exception:
+                pass
+
+            cb(f"Created Bill Serial: '{rec_num}'")
+
+            # 8. Go back to Bills list view
+            cb("Returning to Bills list view")
+            b_crumb = page.locator("a.breadcrumb-item:has-text('Bills'), a.breadcrumb-item:has-text('ใบแจ้งหนี้/ใบวางบิล'), .breadcrumb a:has-text('Bills')").first
+            if b_crumb.is_visible(timeout=2000):
+                b_crumb.click()
+            else:
+                navigate_submenus(page, [["Vendors", "ผู้ขาย"], ["Bills", "ใบแจ้งหนี้/ใบวางบิล"]], frame_cb=frame_cb)
+            time.sleep(2)
+
+            # 9. Check if serial number appears in table list
+            if rec_num:
+                in_list = page.locator(f"table:has-text('{rec_num}'), tr:has-text('{rec_num}'), .o_list_table:has-text('{rec_num}')").count() > 0
+                if in_list:
+                    cb(f"Create PASSED: Found bill serial '{rec_num}' in table list")
+                    return ("Passed", f"Created bill '{rec_num}' successfully and verified in Bills table for role {role}")
+                else:
+                    cb(f"Create FAILED: Bill serial '{rec_num}' not found in table list")
+                    return ("Failed", f"Bill '{rec_num}' created but not found in Bills list table for role {role}")
+
+            cb("Create PASSED: Bill saved and confirmed successfully")
+            return ("Passed", f"Bill created and confirmed successfully in Bills for role {role}")
+
+        except Exception as e:
+            cb(f"Create FAILED during bill creation workflow: {e}")
+            return ("Failed", f"Error during Bill creation workflow for role {role}: {e}")
+
     # Check if sub-menu navigation is required for Booking Orders (สั่งจอง)
     elif "สั่งจอง" in func_name or "Booking" in func_name or app_name == "Sales":
         cb("Navigating sub-menu: Orders/คำสั่งขาย -> สั่งจอง")

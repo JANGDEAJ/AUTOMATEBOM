@@ -1,4 +1,4 @@
-﻿# BOM UAT Automation Framework & Live Dashboard
+# BOM UAT Automation Framework & Live Dashboard
 
 This folder (`improved/`) contains the production-grade Playwright test automation suite and live web monitoring dashboard for **BOM UAT (Accounting & Finance)**.
 
@@ -64,6 +64,7 @@ Default sequence for every test (unless told otherwise):
 - **Save & Sync**: Writes to Excel without touching or re-expanding the table.
 - **Reset**: Clears one row to Pending in-place, no table re-expansion.
 - **Cell edits**: Saved to disk immediately on change.
+- **STRICT DATA SAFETY**: NEVER bulk-overwrite or reset existing `test_results.xlsx` statuses to Skipped. Existing saved results are strictly read-only and preserved.
 
 ---
 

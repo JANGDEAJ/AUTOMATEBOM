@@ -33,6 +33,17 @@ def _autofit(ws):
 def save_report(results: list[dict]):
     """Save results list to Excel with colour-coded Status column in all project directories."""
     os.makedirs(REPORT_DIR, exist_ok=True)
+
+    # SAFETY DUPLICATE BACKUP: Always backup existing Excel file before modifying
+    if os.path.exists(REPORT_FILE):
+        try:
+            import shutil
+            bak_path = REPORT_FILE + f".bak_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            shutil.copy(REPORT_FILE, bak_path)
+            shutil.copy(REPORT_FILE, REPORT_FILE + ".safety_backup.xlsx")
+        except Exception as e:
+            print(f"[BACKUP WARNING] Could not create safety backup: {e}")
+
     df = pd.DataFrame(results)
 
     # Reorder columns neatly
