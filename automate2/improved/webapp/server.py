@@ -134,7 +134,7 @@ def api_run():
             return jsonify({"error": "No failed tests to retry"}), 400
         perm_types = None; roles = None; limit = None
 
-    _state.update(running=True, stop=False, results=[], total=0,
+    _state.update(running=True, stop=False, total=0,
                   done=0, fail=0, skip=0, run_id=str(uuid.uuid4())[:8], latest_ss=None)
     _state["pass"] = 0
 
@@ -168,20 +168,41 @@ def api_update_row():
     body  = request.get_json(force=True)
     tc_id = body.get("tc_id")
     role  = body.get("role")
+    ptype = body.get("ptype") or body.get("Permission Type")
     field = body.get("field")
     value = body.get("value")
     
     updated = False
     for r in _state.get("results", []):
-        if r.get("TC ID") == tc_id and r.get("Role") == role:
+        # Match by TC ID, Role, and Permission Type (if provided)
+        match_ptype = (not ptype) or (r.get("Permission Type") == ptype)
+        if r.get("TC ID") == tc_id and r.get("Role") == role and match_ptype:
             r[field] = value
             updated = True
             break
             
+    if not updated:
+        # Row not in _state["results"] yet (e.g. editing a pending case), pull base row and insert
+        try:
+            df = load_testcases()
+            match = df[(df["TC ID"] == tc_id) & (df["Role"] == role)]
+            if ptype:
+                match = match[match["Permission Type"] == ptype]
+            if len(match) > 0:
+                base_row = match.iloc[0].fillna("").to_dict()
+                base_row[field] = value
+                _state.setdefault("results", []).append(base_row)
+                updated = True
+        except Exception as e:
+            print(f"[UPDATE ROW ERROR] {e}")
+
     if updated:
-        try: save_report(_state["results"])
-        except Exception: pass
-        return jsonify({"status": "updated", "tc_id": tc_id, "field": field})
+        try:
+            save_report(_state["results"])
+        except Exception as e:
+            print(f"[SAVE REPORT ERROR] {e}")
+        return jsonify({"status": "updated", "tc_id": tc_id, "field": field, "value": value})
+        
     return jsonify({"status": "not_found"}), 404
 
 @app.route("/api/reset_row", methods=["POST"])
@@ -423,8 +444,20 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
                 result_row = {**row.to_dict(), "Status": status,
                               "Comments": comment, "Screenshot": ss_name,
                               "Elapsed": f"{elapsed}s", "App": app_name}
-                results.append(result_row)
-                _state["results"] = results
+                
+                # Upsert into global state results to preserve previous runs
+                key = f"{tc_id}||{role}||{ptype}"
+                found = False
+                for idx, r in enumerate(_state["results"]):
+                    if f"{r.get('TC ID')}||{r.get('Role')}||{r.get('Permission Type')}" == key:
+                        _state["results"][idx] = result_row
+                        found = True
+                        break
+                if not found:
+                    _state["results"].append(result_row)
+                    
+                try: save_report(_state["results"])
+                except Exception: pass
 
                 _broadcast("tc_done", {
                     "tc_id": tc_id, "role": role, "function": func,

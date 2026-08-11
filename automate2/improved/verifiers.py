@@ -11,31 +11,32 @@ from navigator import open_app, is_app_visible
 from config import SEL_APP_DRAWER, APP_ALIASES, DASHBOARD_URL
 
 APP_CREATE_BUTTONS = {
-    'Point of Sale': ['button:has-text("New Session")', 'button:has-text("Open")', 'button:has-text("New")', 'a:has-text("New")'],
-    'Sales': ['button:has-text("New")', 'a:has-text("New")', '.o_list_button_add'],
-    'Accounting': ['button:has-text("New")', 'a:has-text("New")'],
-    'Purchase': ['button:has-text("New")', 'a:has-text("New")'],
-    'Inventory': ['button:has-text("New")', 'a:has-text("New")'],
-    'Request': ['button:has-text("New")', 'button:has-text("Create")', 'a:has-text("New")'],
-    'Fleet': ['button:has-text("New")', 'a:has-text("New")'],
-    'MPOS': ['button:has-text("New")', 'a:has-text("New")']
+    'Point of Sale': ['button:has-text("New Session")', 'button:has-text("เปิดเซสชัน")', 'button:has-text("Open")', 'button:has-text("New")', 'button:has-text("สร้าง")', 'a:has-text("New")', '.o_list_button_add'],
+    'Sales': ['button:has-text("New")', 'button:has-text("สร้าง")', 'a:has-text("New")', 'a:has-text("สร้าง")', '.o_list_button_add'],
+    'Accounting': ['button:has-text("New")', 'button:has-text("สร้าง")', 'a:has-text("New")', '.o_list_button_add'],
+    'Purchase': ['button:has-text("New")', 'button:has-text("สร้าง")', 'a:has-text("New")', '.o_list_button_add'],
+    'Inventory': ['button:has-text("New")', 'button:has-text("สร้าง")', 'a:has-text("New")', '.o_list_button_add'],
+    'Request': ['button:has-text("New")', 'button:has-text("สร้าง")', 'button:has-text("Create")', 'a:has-text("New")'],
+    'Fleet': ['button:has-text("New")', 'button:has-text("สร้าง")', 'a:has-text("New")'],
+    'MPOS': ['button:has-text("New")', 'button:has-text("สร้าง")', 'a:has-text("New")'],
+    'default': ['button:has-text("New")', 'button:has-text("สร้าง")', 'button:has-text("Create")', 'a:has-text("New")', '.o_list_button_add']
 }
 
 APP_VALIDATE_BUTTONS = {
-    'Point of Sale': ['button:has-text("Validate")', 'button:has-text("Close")'],
-    'Sales': ['button:has-text("Confirm")', 'button:has-text("Validate")'],
-    'Accounting': ['button:has-text("Confirm")', 'button:has-text("Validate")', 'button:has-text("Approve")'],
-    'Purchase': ['button:has-text("Confirm")', 'button:has-text("Approve")'],
-    'Inventory': ['button:has-text("Validate")'],
-    'Request': ['button:has-text("Approve")', 'button:has-text("Validate")', 'button:has-text("Confirm")'],
-    'default': ['button:has-text("Approve")', 'button:has-text("Validate")', 'button:has-text("Confirm")', 'button:has-text("Reject")']
+    'Point of Sale': ['button:has-text("Validate")', 'button:has-text("ตรวจรับ")', 'button:has-text("Close")', 'button:has-text("ปิด")'],
+    'Sales': ['button:has-text("Confirm")', 'button:has-text("ยืนยัน")', 'button:has-text("Validate")'],
+    'Accounting': ['button:has-text("Confirm")', 'button:has-text("ยืนยัน")', 'button:has-text("Validate")', 'button:has-text("Approve")', 'button:has-text("อนุมัติ")'],
+    'Purchase': ['button:has-text("Confirm")', 'button:has-text("ยืนยัน")', 'button:has-text("Approve")', 'button:has-text("อนุมัติ")'],
+    'Inventory': ['button:has-text("Validate")', 'button:has-text("ตรวจรับ")'],
+    'Request': ['button:has-text("Approve")', 'button:has-text("อนุมัติ")', 'button:has-text("Validate")', 'button:has-text("Confirm")', 'button:has-text("ยืนยัน")'],
+    'default': ['button:has-text("Approve")', 'button:has-text("อนุมัติ")', 'button:has-text("Validate")', 'button:has-text("Confirm")', 'button:has-text("ยืนยัน")', 'button:has-text("Reject")', 'button:has-text("ปฏิเสธ")']
 }
 
 APP_SETTING_SELECTORS = {
-    'Point of Sale': ['a.main_link:has-text("Configuration")', '.o_menu_sections a:has-text("Configuration")'],
-    'Sales': ['a.main_link:has-text("Configuration")', '.o_menu_sections a:has-text("Configuration")'],
-    'Accounting': ['a.main_link:has-text("Configuration")', '.o_menu_sections a:has-text("Configuration")'],
-    'default': ['a.main_link:has-text("Settings")', 'a.main_link:has-text("Configuration")', '.o_menu_sections a:has-text("Settings")']
+    'Point of Sale': ['a.main_link:has-text("Configuration")', 'a:has-text("การตั้งค่า")', '.o_menu_sections a:has-text("Configuration")'],
+    'Sales': ['a.main_link:has-text("Configuration")', 'a:has-text("การตั้งค่า")', '.o_menu_sections a:has-text("Configuration")'],
+    'Accounting': ['a.main_link:has-text("Configuration")', 'a:has-text("การตั้งค่า")', '.o_menu_sections a:has-text("Configuration")'],
+    'default': ['a.main_link:has-text("Settings")', 'a.main_link:has-text("Configuration")', 'a:has-text("การตั้งค่า")', '.o_menu_sections a:has-text("Settings")']
 }
 
 def _check_any_visible(page, selectors) -> bool:
@@ -56,10 +57,14 @@ def _expect_has(expected: str) -> bool:
 
 
 def _is_error_page(page) -> bool:
-    """Check if the current page shows an access error or is completely broken."""
+    """Check if the current page shows an access error, unauthorized message, or is broken."""
     error_patterns = [
         "text='Access Denied'",
         "text='Access Error'",
+        "text='Unauthorized'",
+        "text='Forbidden'",
+        "text='ไม่มีสิทธิ์'",
+        "text='ไม่ได้รับอนุญาต'",
         ".o_error_dialog",
         "text='403'",
         "text='404'",
@@ -69,7 +74,7 @@ def _is_error_page(page) -> bool:
     ]
     for sel in error_patterns:
         try:
-            if page.locator(sel).count() > 0:
+            if page.locator(sel).count() > 0 and page.locator(sel).first.is_visible():
                 return True
         except Exception:
             pass
@@ -113,7 +118,8 @@ def verify_read(page, app_name, func_name, expected, role, frame_cb=None):
             try: frame_cb(page, label)
             except Exception: pass
 
-    should_have = _expect_has(expected)
+    # Always attempt to open the app directly (Point of Sale, etc.)
+    should_have = True
 
     # First check for Access Error on current page
     if _is_error_page(page):
@@ -127,26 +133,36 @@ def verify_read(page, app_name, func_name, expected, role, frame_cb=None):
     if should_have:
         # Try opening app
         cb(f"Opening {app_name}")
-        open_app(page, app_name, frame_cb=frame_cb)
+        opened = open_app(page, app_name, frame_cb=frame_cb)
         time.sleep(1.5)
 
-        # Check for error dialogs after navigation
+        # Check for error dialogs or unauthorized message
         if _is_error_page(page):
             cb(f"Read check failed: Access Error in {app_name}")
-            return ("Failed", f"Access Error displayed when opening {app_name}")
+            return ("Failed", f"Access Error / Unauthorized displayed when opening {app_name}")
 
-        # ──────────────────────────────────────────────────────────────────
-        # USER RULE: If the page loaded and has readable content, it's PASS.
-        # The page is NOT blank, NOT an error page -> it's readable -> PASS.
-        # ──────────────────────────────────────────────────────────────────
-        if _page_has_content(page):
-            cb(f"Read PASSED: {app_name} page loaded with readable content")
-            return ("Passed", f"Opened {app_name} — page loaded with readable content for {role}")
+        if not opened:
+            cb(f"Read check failed: Could not open {app_name}")
+            return ("Failed", f"App '{app_name}' icon not found or could not be opened for role {role}")
 
-        # Even if we can't detect specific content indicators, if there's no
-        # error dialog, the page is still "readable" per user's definition
-        cb(f"Read PASSED: {app_name} page loaded without errors")
-        return ("Passed", f"Opened {app_name} — no errors detected, page accessible for {role}")
+        # Check if big font app title or readable content is displayed on page
+        aliases = APP_ALIASES.get(app_name, [app_name])
+        has_title = False
+        for alias in aliases:
+            try:
+                loc = page.get_by_text(alias)
+                if loc.count() > 0 and loc.first.is_visible():
+                    has_title = True
+                    break
+            except Exception:
+                pass
+
+        if has_title or _page_has_content(page):
+            cb(f"Read PASSED: {app_name} page loaded with readable title/content")
+            return ("Passed", f"Opened {app_name} — page loaded with readable header/content for {role}")
+
+        cb(f"Read FAILED: {app_name} page is blank or not readable")
+        return ("Failed", f"Page for {app_name} is blank or could not be read for {role}")
 
     else:
         # Negative check: expect hidden
@@ -188,9 +204,6 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
     elif not should_have and not found:
         return ("Passed", f"Creation button hidden as expected for {app_name}")
     elif should_have and not found:
-        # Fallback: if page loads normally without error -> mark Passed
-        if not _is_error_page(page):
-            return ("Passed", f"Page for {app_name} loaded normally — no error for {role}")
         return ("Failed", f"Missing creation button for {app_name}")
     else:
         return ("Failed", f"Found creation button for {app_name} when not expected")
@@ -214,9 +227,7 @@ def verify_validate(page, app_name, func_name, expected, role, frame_cb=None):
     elif not should_have and not found:
         return ("Passed", f"Validation button hidden as expected for {app_name}")
     elif should_have and not found:
-        if not _is_error_page(page):
-            return ("Passed", f"Page for {app_name} loaded normally — no error for {role}")
-        return ("Failed", f"Missing validation button for {app_name}")
+        return ("Failed", f"Missing validation/approval button for {app_name}")
     else:
         return ("Failed", f"Found validation button for {app_name} when not expected")
 
@@ -239,8 +250,6 @@ def verify_setting(page, app_name, func_name, expected, role, frame_cb=None):
     elif not should_have and not found:
         return ("Passed", f"Did not find setting/configuration menu for {app_name}")
     elif should_have and not found:
-        if not _is_error_page(page):
-            return ("Passed", f"Page for {app_name} loaded normally — no error for {role}")
         return ("Failed", f"Missing setting/configuration menu for {app_name}")
     else:
         return ("Failed", f"Found setting/configuration menu for {app_name} when not expected")

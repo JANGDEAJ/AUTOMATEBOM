@@ -471,8 +471,10 @@ async function handleCellEdit(key, field, newValue) {
       await fetch('/api/update_row', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tc_id: row['TC ID'], role: row['Role'], field, value: val })
+        body: JSON.stringify({ tc_id: row['TC ID'], role: row['Role'], ptype: row['Permission Type'], field, value: val })
       });
+      await loadAllTestCases(true);
+      await updateMatchingCount();
     } catch {}
   }
 }
@@ -680,6 +682,9 @@ async function syncCurrentEdits() {
 
   try {
     const res = await fetch('/api/save_report', { method: 'POST' }).then(r => r.json());
+    // Force re-fetch from server to immediately reflect all saved Excel changes
+    await loadAllTestCases(true);
+    await updateMatchingCount();
     log(`[SYNC] Saved and synced edits to current report file (${res.count||0} records)`, 'ok');
     if (syncBtn) {
       syncBtn.textContent = 'Synced to test_results.xlsx';
