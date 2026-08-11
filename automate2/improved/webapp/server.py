@@ -171,6 +171,35 @@ def api_update_row():
         return jsonify({"status": "updated", "tc_id": tc_id, "field": field})
     return jsonify({"status": "not_found"}), 404
 
+@app.route("/api/reset_row", methods=["POST"])
+def api_reset_row():
+    body = request.get_json(force=True)
+    tc_id = body.get("tc_id")
+    role = body.get("role")
+    
+    deleted = False
+    new_results = []
+    
+    for r in _state.get("results", []):
+        if r.get("TC ID") == tc_id and r.get("Role") == role:
+            deleted = True
+            st = r.get("Status")
+            if st == "Passed": _state["pass"] = max(0, _state["pass"] - 1)
+            elif st == "Failed": _state["fail"] = max(0, _state["fail"] - 1)
+            elif st == "Skipped": _state["skip"] = max(0, _state["skip"] - 1)
+            _state["done"] = max(0, _state["done"] - 1)
+            _state["total"] = max(0, _state["total"] - 1)
+        else:
+            new_results.append(r)
+            
+    if deleted:
+        _state["results"] = new_results
+        try: save_report(_state["results"])
+        except Exception as e: print(f"[RESET ROW ERROR] {e}")
+        return jsonify({"status": "reset", "tc_id": tc_id})
+        
+    return jsonify({"status": "not_found"}), 404
+
 @app.route("/api/save_report", methods=["POST"])
 def api_save_report():
     if _state.get("results"):

@@ -151,21 +151,8 @@ function openLiveFullscreen() {
 
 let _livePollTimer = null;
 function startLivePoll() {
-  if (_livePollTimer) clearInterval(_livePollTimer);
-  _livePollTimer = setInterval(async () => {
-    if (!S.running) return;
-    try {
-      const res = await fetch('/api/live_frame').then(r => r.json());
-      if (res.image) {
-        document.getElementById('live-monitor-img').src = res.image;
-        const fullImg = document.getElementById('modal-live-full-img');
-        if (fullImg) fullImg.src = res.image;
-      }
-      if (res.label) {
-        updateMonitorBadge(res.label, res.tc_id);
-      }
-    } catch {}
-  }, 300);
+  if (_livePollTimer) { clearInterval(_livePollTimer); _livePollTimer = null; }
+  // Disabled: Relying entirely on SSE for live_frame events now to prevent double-polling
 }
 function stopLivePoll() {
   if (_livePollTimer) { clearInterval(_livePollTimer); _livePollTimer = null; }
@@ -296,10 +283,11 @@ async function updateMatchingCount() {
 
 
   const oldRows = [...(S.rows || [])];
+  const oldMap = new Map(oldRows.map(r => [`${r['TC ID']}||${r['Role']}||${r['Permission Type']}`, r]));
   let queueCounter = 0;
 
   S.rows = matched.map((r) => {
-    const existing = oldRows.find(ex => ex && ex['TC ID'] === r['TC ID'] && ex['Role'] === r['Role'] && ex['Permission Type'] === r['Permission Type']);
+    const existing = oldMap.get(`${r['TC ID']}||${r['Role']}||${r['Permission Type']}`);
     const status = existing?.Status || r.Status || '';
     const isPending = !status || status === 'Pending';
 
@@ -426,6 +414,9 @@ function renderTable() {
     const rc = isQueued ? 'row-queued' : (st === 'Passed' ? 'row-pass' : st === 'Failed' ? 'row-fail' : st === 'Running' ? 'row-run' : 'row-skip');
     const ss = row.Screenshot
       ? `<button class="btn-primary btn-xs" title="Preview screenshot" onclick="viewSS('${row.Screenshot}', '${row['TC ID']}')">Preview</button>` : '';
+      
+    const resetBtn = (st === 'Passed' || st === 'Failed' || st === 'Skipped') 
+      ? `<button class="btn-ghost btn-xs" style="color:var(--red);margin-left:4px" title="Reset test" onclick="resetTest('${key}')">Reset</button>` : '';
 
     const queueBadge = isQueued
       ? `<span class="badge b-queued" title="Queued target execution #${row._queuedIndex}">#${row._queuedIndex}</span>`
@@ -452,7 +443,7 @@ function renderTable() {
       <td>${statusSelect}</td>
       <td class="cell-editable cell-cmt" contenteditable="true" onblur="handleCellEdit('${key}', 'Comments', this.innerText)" title="Click to edit Comment">${row.Comments||''}</td>
       <td class="cell-time">${row.Elapsed||''}</td>
-      <td>${ss}</td>`;
+      <td style="white-space:nowrap">${ss}${resetBtn}</td>`;
     tbody.appendChild(tr);
   });
 
@@ -483,6 +474,37 @@ async function handleCellEdit(key, field, newValue) {
         body: JSON.stringify({ tc_id: row['TC ID'], role: row['Role'], field, value: val })
       });
     } catch {}
+  }
+}
+
+async function resetTest(key) {
+  if (S.running) { alert('Stop the current run before resetting tests.'); return; }
+  const row = S.rows.find(r => \`\${r['TC ID']}||\${r['Role']}||\${r['Permission Type']}\` === key);
+  if (!row) return;
+  
+  if (!confirm(`Are you sure you want to reset and permanently delete the result for ${row['TC ID']}?`)) return;
+  
+  log(`[RESET] Deleting result for ${row['TC ID']}...`, 'warn');
+  
+  try {
+    await fetch('/api/reset_row', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tc_id: row['TC ID'], role: row['Role'] })
+    });
+    
+    // Clear local state
+    if (S.tcDetail[key]) delete S.tcDetail[key];
+    
+    // Completely remove it from S.rows so the next match treats it as completely new
+    S.rows = S.rows.filter(r => \`\${r['TC ID']}||\${r['Role']}||\${r['Permission Type']}\` !== key);
+    
+    // Force a re-match to pull it cleanly as Pending again
+    await updateMatchingCount();
+    
+    log(`[RESET] ${row['TC ID']} has been wiped and reset to Pending.`, 'info');
+  } catch (err) {
+    log(`[RESET ERROR] Failed to reset ${row['TC ID']}: ${err}`, 'fail');
   }
 }
 
@@ -811,11 +833,16 @@ const DEF_CFG = {
   idm:  { username:'cmp.aa', password:'THPCore@2024' },
   site: { url:'https://reg1-bom-uat.thpc.cc', db:'13000' },
   aliases: {
-    'Point of Sale': ['Point of Sale','Sessions'],
-    'Sales':         ['Sales'], 'Accounting':['Accounting'],
-    'Purchase':      ['Purchase'], 'Inventory':['Inventory'],
-    'Request':       ['Request','Expenses','My Expenses'],
-    'Fleet':         ['Fleet'], 'MPOS':['MPOS'],
+    'Point of Sale': ['การขายหน้าร้าน','Point of Sale','Sessions','รายการขาย'],
+    'Sales':         ['การขาย','Sales','คำสั่งขาย/สั่งจอง'],
+    'Accounting':    ['การบัญชี','Accounting','การเงิน'],
+    'Purchase':      ['การจัดซื้อ','Purchase'],
+    'Inventory':     ['คลังสินค้า','Inventory'],
+    'Request':       ['การเบิกค่าใช้จ่าย','Request','Expenses','My Expenses'],
+    'Fleet':         ['การขนส่ง','Fleet','ยานพาหนะ','พรบ.'],
+    'MPOS':          ['MPOS','ข้อมูลปณอ.'],
+    'Contacts':      ['การติดต่อ','Contacts'],
+    'Settings':      ['การตั้งค่า','Settings'],
   }
 };
 function loadCfg() { try { return JSON.parse(localStorage.getItem(CFG_KEY)) || DEF_CFG; } catch { return DEF_CFG; } }
