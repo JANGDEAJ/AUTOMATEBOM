@@ -50,6 +50,16 @@ def _restore_state():
 
 _restore_state()
 
+import atexit
+def _shutdown_save():
+    try:
+        if _state.get("results"):
+            save_report(_state["results"])
+            print(f"[SHUTDOWN] Auto-saved {len(_state['results'])} results on exit.")
+    except Exception as e:
+        print(f"[SHUTDOWN SAVE ERROR] {e}")
+atexit.register(_shutdown_save)
+
 _active_ctx = None
 _active_page = None
 _ctx_lock = threading.Lock()
