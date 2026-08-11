@@ -78,6 +78,8 @@ Default sequence for every test (unless told otherwise):
 6. Return to Odoo home. Repeat.
 
 
+- **Multi-language (Thai + English) Button Matching**: Verification engines automatically scan for both Thai (สร้าง, เปิดเซสชัน, สร้างใหม่, ยืนยัน, การตั้งค่า) and English (New, New Session, Create, Confirm, Settings) UI text variants.
+
 ## 📌 Test Batch Path Rules
 
 Each test batch (defined by a TC range + permission type) has its own **fixed navigation path**.
