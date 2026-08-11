@@ -77,6 +77,26 @@ Default sequence for every test (unless told otherwise):
 5. Screenshot proof.
 6. Return to Odoo home. Repeat.
 
+
+## 📌 Test Batch Path Rules
+
+Each test batch (defined by a TC range + permission type) has its own **fixed navigation path**.
+
+**Rules:**
+- Once a path is set for a range (e.g. Read TC-265 to TC-381), it stays permanently for that range.
+- Working on a new range (e.g. Read TC-382 to TC-xxx) does NOT affect any previous range.
+- Going back to a previous range always uses its original path — never the new one.
+- Paths are NEVER changed unless the user explicitly says so.
+- The user defines paths step-by-step. The bot waits for instructions before each new batch.
+
+**Example:**
+| Batch | Range | Path |
+|-------|-------|------|
+| Read | TC-265 to TC-381 | App Drawer → Point of Sale icon |
+| Read | TC-382 to TC-xxx | (to be defined by user) |
+
+Future batches will be added here as they are defined.
+
 ### Current Test Progress
 | Range | App | Type | Notes |
 |-------|-----|------|-------|
