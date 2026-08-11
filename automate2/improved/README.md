@@ -39,7 +39,7 @@ automate2/
 Central repository for configuration settings:
 - **Target URL**: `https://reg1-bom-uat.thpc.cc` (Database: `13000`).
 - **IDM Stage 1 Credentials**: `cmp.aa` / `THPCore@2024`.
-- **Role Credentials**: Credentials mapped for 6 roles (`Super Admin`, `Admin`, `Supervisor`, `Super User`, `User(Cashier)`, `Outsource`).
+- **Role Credentials**: Credentials mapped for 8 roles (`Super Admin (HQ)`, `Super Admin (สาขา)`, `Admin (HQ)`, `Admin (สาขา)`, `Supervisor`, `Super User`, `User(Cashier)`, `Outsource`). *Note: The Excel matrix collapses HQ and Branch roles into single columns. The `loader.py` script automatically splits them into independent test cases using `_HQ` and `_Branch` IDs.*
 - **App Aliases Map**: Aliases mapping English module names (e.g. `Point of Sale`, `Accounting`, `Sales`) to Thai UI labels.
 
 ### 2. `login.py`
