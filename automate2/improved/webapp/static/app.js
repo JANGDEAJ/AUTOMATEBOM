@@ -479,7 +479,7 @@ async function handleCellEdit(key, field, newValue) {
 
 async function resetTest(key) {
   if (S.running) { alert('Stop the current run before resetting tests.'); return; }
-  const row = S.rows.find(r => \`\${r['TC ID']}||\${r['Role']}||\${r['Permission Type']}\` === key);
+  const row = S.rows.find(r => `${r['TC ID']}||${r['Role']}||${r['Permission Type']}` === key);
   if (!row) return;
   
   if (!confirm(`Are you sure you want to reset and permanently delete the result for ${row['TC ID']}?`)) return;
@@ -497,7 +497,7 @@ async function resetTest(key) {
     if (S.tcDetail[key]) delete S.tcDetail[key];
     
     // Completely remove it from S.rows so the next match treats it as completely new
-    S.rows = S.rows.filter(r => \`\${r['TC ID']}||\${r['Role']}||\${r['Permission Type']}\` !== key);
+    S.rows = S.rows.filter(r => `${r['TC ID']}||${r['Role']}||${r['Permission Type']}` !== key);
     
     // Force a re-match to pull it cleanly as Pending again
     await updateMatchingCount();
