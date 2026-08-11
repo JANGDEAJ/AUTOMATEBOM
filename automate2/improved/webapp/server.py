@@ -352,7 +352,7 @@ def _capture_live_frame(page, tc_id, label="live"):
 
 # ── Worker ────────────────────────────────────────────────────────────────────
 def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
-    global _active_ctx, _active_page
+    global _active_browser, _active_ctx, _active_page
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
@@ -547,6 +547,7 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
     finally:
         _state["running"] = False
         with _ctx_lock:
+            _active_browser = None
             _active_ctx = None
             _active_page = None
         try:

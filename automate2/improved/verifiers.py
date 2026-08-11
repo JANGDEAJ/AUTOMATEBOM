@@ -379,7 +379,7 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         try:
             # 1. Fill Vendor (ผู้ขาย)
             cb("Filling Vendor dropdown")
-            vendor_loc = page.locator("div[name='partner_id'] input, input[id*='partner_id'], .o_field_widget[name='partner_id'] input, xpath=//*[contains(text(), 'ลูกค้าที่มาติดต่อ') or contains(text(), 'ผู้ขาย')]/following::input[1]").first
+            vendor_loc = page.locator("div[name='partner_id'] input, input[id*='partner_id'], .o_field_widget[name='partner_id'] input").first
             if vendor_loc.is_visible(timeout=2000):
                 vendor_loc.click()
                 time.sleep(0.5)
@@ -421,14 +421,14 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
             cb("Filling Bill Reference / การอ้างอิง")
             import random
             ref_str = f"BILL-REF-{random.randint(100, 999)}"
-            ref_inp = page.locator("div[name='ref'] input, input[name='ref'], div[name='payment_reference'] input, xpath=//*[contains(text(), 'การอ้างอิง')]/following::input[1]").first
+            ref_inp = page.locator("div[name='ref'] input, input[name='ref'], div[name='payment_reference'] input").first
             if ref_inp.is_visible(timeout=1500):
                 ref_inp.fill(ref_str)
                 time.sleep(0.5)
 
             # 4. Fill Terms / Payment Terms if present
             cb("Filling Terms dropdown")
-            terms_inp = page.locator("div[name='invoice_payment_term_id'] input, div[name='payment_term_id'] input, xpath=//*[contains(text(), 'Payment terms')]/following::input[1]").first
+            terms_inp = page.locator("div[name='invoice_payment_term_id'] input, div[name='payment_term_id'] input").first
             if terms_inp.is_visible(timeout=1500):
                 terms_inp.click()
                 time.sleep(0.5)
@@ -439,7 +439,7 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
 
             # 5. Fill Accounting Date if present
             cb("Filling Accounting Date if required")
-            acc_date_inp = page.locator("div[name='date'] input, div[name='accounting_date'] input, xpath=//*[contains(text(), 'Accounting Date')]/following::input[1]").first
+            acc_date_inp = page.locator("div[name='date'] input, div[name='accounting_date'] input").first
             if acc_date_inp.is_visible(timeout=1500):
                 acc_date_inp.click()
                 time.sleep(0.5)

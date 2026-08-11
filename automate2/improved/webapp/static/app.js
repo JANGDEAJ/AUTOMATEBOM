@@ -288,7 +288,7 @@ async function updateMatchingCount() {
 
   S.rows = matched.map((r) => {
     const existing = oldMap.get(`${r['TC ID']}||${r['Role']}||${r['Permission Type']}`);
-    const status = existing?.Status || r.Status || '';
+    const status = (existing?.Status !== undefined ? existing.Status : r.Status) || '';
     const isPending = !status || status === 'Pending';
 
     let qIdx = null;
@@ -301,13 +301,13 @@ async function updateMatchingCount() {
       'TC ID': r['TC ID'] || '',
       'Role': r['Role'] || '',
       'Permission Type': r['Permission Type'] || '',
-      'Function': r['Function'] || '',
+      'Function': existing?.Function ?? r['Function'] ?? '',
       'Module': r['Module'] || '',
-      Status: status,
-      Comments: existing?.Comments || r.Comments || '',
-      App: existing?.App || r.App || '',
-      Elapsed: existing?.Elapsed || r.Elapsed || '',
-      Screenshot: existing?.Screenshot || r.Screenshot || '',
+      Status: (existing?.Status !== undefined ? existing.Status : r.Status) || '',
+      Comments: existing?.Comments ?? r.Comments ?? '',
+      App: existing?.App ?? r.App ?? '',
+      Elapsed: existing?.Elapsed ?? r.Elapsed ?? '',
+      Screenshot: existing?.Screenshot ?? r.Screenshot ?? '',
       _queuedIndex: qIdx,
       _step: r['ขั้นตอนทดสอบ'] || '',
       _expected: r['ผลที่คาดหวัง'] || ''
