@@ -338,7 +338,6 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
         _state["total"] = total
         _broadcast("run_start", {"total": total, "run_id": _state["run_id"]})
 
-        results = []
         cur_role = None
 
         with sync_playwright() as pw:
@@ -392,10 +391,23 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
                     except Exception as e:
                         if _state["stop"]: break
                         _broadcast("tc_done", {"tc_id": tc_id, "status": "Failed", "comment": f"Login: {e}"})
-                        results.append({**row.to_dict(), "Status": "Failed",
-                                        "Comments": str(e)[:100], "Screenshot": ""})
+                        result_row = {**row.to_dict(), "Status": "Failed",
+                                        "Comments": str(e)[:100], "Screenshot": ""}
                         _state["done"] += 1; _state["fail"] += 1
-                        _state["results"] = results
+                        
+                        # Upsert failure into global state
+                        key = f"{tc_id}||{role}||{ptype}"
+                        found = False
+                        for idx, r in enumerate(_state["results"]):
+                            if f"{r.get('TC ID')}||{r.get('Role')}||{r.get('Permission Type')}" == key:
+                                _state["results"][idx] = result_row
+                                found = True
+                                break
+                        if not found:
+                            _state["results"].append(result_row)
+                            
+                        try: save_report(_state["results"])
+                        except Exception: pass
                         continue
 
                 ss_name = f"{tc_id}_{role.replace(' ','_')}_{ptype[:6].replace(' ','_')}.png"
@@ -486,9 +498,7 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
 
             browser.close()
 
-        if results:
-            save_report(results)
-            _broadcast("report_ready", {"pass": _state["pass"], "fail": _state["fail"]})
+        _broadcast("report_ready", {"pass": _state["pass"], "fail": _state["fail"]})
         
         if _state["stop"]:
             _broadcast("run_stopped", {"done": _state["done"]})
