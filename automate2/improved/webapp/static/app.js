@@ -113,7 +113,8 @@ function onEvent({ type, data }) {
       S.running = false; setRunUI(false); stopTimer();
       updateRetryBtn(data.fail);
       updateMonitorBadge('COMPLETED', 'All tests done');
-      buildSummary();
+      // Refresh queue badges for next sequential run — table stays visible
+      updateMatchingCount();
       break;
 
     case 'run_stopped':
@@ -563,20 +564,25 @@ async function startRun() {
   const tcRaw       = document.getElementById('inp-tc-filter').value.trim();
   let tc_ids        = tcRaw ? tcRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
 
-  // Auto-pick next queued target test cases matching the #1, #2... badges in the table
+  // ── Sequential Queue Auto-Advance ──────────────────────────────────────────
+  // Auto-pick next PENDING test cases matching the #1, #2... badges in the table.
+  // When auto-picking, do NOT send limit to the server — we already know exactly
+  // which TC IDs to run. Sending limit causes df.head(limit) to slice from the
+  // top of the dataset, which may exclude the specific tests we picked.
+  let sendLimit = limit;
   if (!tc_ids && limit && S.rows.length) {
     const queued = S.rows.filter(r => r._queuedIndex != null);
     if (queued.length) {
       tc_ids = queued.map(r => r['TC ID']);
-      log(`[QUEUE] Selected next ${tc_ids.length} pending case(s): ${tc_ids.join(', ')}`, 'info');
+      sendLimit = null;  // Don't send limit — we have explicit TC IDs
+      log(`[QUEUE] Auto-selected next ${tc_ids.length} pending case(s): ${tc_ids.join(', ')}`, 'info');
     }
   }
-
 
   clearLog();
   const r = await fetch('/api/run', {
     method: 'POST', headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ types, roles, limit, headless, tc_ids, proof_delay })
+    body: JSON.stringify({ types, roles, limit: sendLimit, headless, tc_ids, proof_delay })
   }).then(r => r.json());
 
 
@@ -600,9 +606,43 @@ function stopRun() {
   fetch('/api/stop', { method: 'POST' });
 }
 
+// ── Visible Browser Pop-Out Test ────────────────────────────────────────────
+async function startRunVisible() {
+  if (S.running) return;
+  const types = getChips('chip-types');
+  const roles = getChips('chip-roles');
+  if (!types.length || !roles.length) {
+    alert('Select at least one type and one role.'); return;
+  }
+  const limit       = parseInt(document.getElementById('inp-limit').value) || null;
+  const proof_delay = parseFloat(document.getElementById('inp-proof-delay').value) || 1.5;
+  const tcRaw       = document.getElementById('inp-tc-filter').value.trim();
+  let tc_ids        = tcRaw ? tcRaw.split(',').map(s => s.trim()).filter(Boolean) : null;
+
+  let sendLimit = limit;
+  if (!tc_ids && limit && S.rows.length) {
+    const queued = S.rows.filter(r => r._queuedIndex != null);
+    if (queued.length) {
+      tc_ids = queued.map(r => r['TC ID']);
+      sendLimit = null;
+      log(`[VISIBLE] Auto-selected next ${tc_ids.length} pending case(s): ${tc_ids.join(', ')}`, 'info');
+    }
+  }
+
+  clearLog();
+  log('[VISIBLE] 🖥 Launching browser in VISIBLE mode — watch the pop-up window!', 'info');
+  const r = await fetch('/api/run', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ types, roles, limit: sendLimit, headless: false, tc_ids, proof_delay })
+  }).then(r => r.json());
+
+  if (r.error) { alert(r.error); }
+}
+
 function setRunUI(running) {
   S.running = running;
   document.getElementById('btn-run').style.display  = running ? 'none' : 'inline-block';
+  document.getElementById('btn-run-visible').style.display = running ? 'none' : 'inline-block';
   document.getElementById('btn-stop').style.display = running ? 'inline-block' : 'none';
   if (!running) {
     const bar = document.getElementById('prog-bar');

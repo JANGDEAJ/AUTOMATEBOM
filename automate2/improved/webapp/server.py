@@ -2,6 +2,7 @@
 server.py - BOM UAT Automation Dashboard (Flask + SSE + Live View + Fast Interrupt)
 """
 import sys, os, json, queue, threading, traceback, time, uuid, base64
+import pandas as pd
 sys.stdout.reconfigure(encoding="utf-8")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -229,10 +230,15 @@ def _run_worker(perm_types, roles, limit, tc_ids, headless, proof_delay):
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)
     os.makedirs(REPORT_DIR, exist_ok=True)
     try:
-        df  = load_testcases(permission_types=perm_types, roles=roles, limit=limit)
+        df  = load_testcases(permission_types=perm_types, roles=roles, limit=None)
         nav = load_nav_matrix()
         if tc_ids:
+            # When specific TC IDs are given (e.g. from auto-queue), filter to those exact tests.
+            # Do NOT apply limit — we already know exactly which tests to run.
             df = df[df["TC ID"].isin(tc_ids)]
+        elif limit:
+            # Only apply limit when no specific TC IDs are given (first run slicing)
+            df = df.head(int(limit))
 
         total = len(df)
         _state["total"] = total
