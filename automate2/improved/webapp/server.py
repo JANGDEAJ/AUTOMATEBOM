@@ -90,7 +90,7 @@ def api_testcases():
         limit = request.args.get("limit", type=int, default=None)
         df    = load_testcases(permission_types=perm, roles=roles, limit=limit)
         df    = df.fillna("")
-        cols  = [c for c in ["TC ID","Module","Function","Role","Permission Type","ขั้นตอนทดสอบ","ผลที่คาดหวัง"] if c in df.columns]
+        cols  = [c for c in ["TC ID","Module","Function","App","Role","Permission Type","ขั้นตอนทดสอบ","ผลที่คาดหวัง"] if c in df.columns]
         rows  = df[cols].to_dict(orient="records")
         return jsonify({"total": len(rows), "rows": rows})
     except Exception as e:
