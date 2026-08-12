@@ -40,28 +40,34 @@ def _restore_state():
     try:
         from config import REPORT_FILE
         from loader import load_testcases
+        # Always load ALL master test cases first so the table is never empty
         master_df = load_testcases().fillna("")
         master_map = {}
         for _, r in master_df.iterrows():
             key = f"{r.get('TC ID')}||{r.get('Role')}||{r.get('Permission Type')}"
             master_map[key] = r.to_dict()
 
+        # Overlay saved statuses/results from the report Excel (if it exists)
         if os.path.exists(REPORT_FILE):
-            df = pd.read_excel(REPORT_FILE, sheet_name="Results").fillna("")
-            for _, r in df.iterrows():
-                st = str(r.get("Status", "")).strip()
-                key = f"{r.get('TC ID')}||{r.get('Role')}||{r.get('Permission Type')}"
-                if key in master_map:
-                    if st and st != "nan":
-                        master_map[key]["Status"] = st
-                    if r.get("Comments") and str(r.get("Comments")) != "nan":
-                        master_map[key]["Comments"] = r.get("Comments")
-                    if r.get("Screenshot") and str(r.get("Screenshot")) != "nan":
-                        master_map[key]["Screenshot"] = r.get("Screenshot")
-                    if r.get("Elapsed") and str(r.get("Elapsed")) != "nan":
-                        master_map[key]["Elapsed"] = r.get("Elapsed")
-                    if r.get("App") and str(r.get("App")) != "nan":
-                        master_map[key]["App"] = r.get("App")
+            try:
+                df = pd.read_excel(REPORT_FILE, sheet_name="Results", engine="openpyxl").fillna("")
+                for _, r in df.iterrows():
+                    st = str(r.get("Status", "")).strip()
+                    key = f"{r.get('TC ID')}||{r.get('Role')}||{r.get('Permission Type')}"
+                    if key in master_map:
+                        if st and st != "nan":
+                            master_map[key]["Status"] = st
+                        if r.get("Comments") and str(r.get("Comments")) != "nan":
+                            master_map[key]["Comments"] = r.get("Comments")
+                        if r.get("Screenshot") and str(r.get("Screenshot")) != "nan":
+                            master_map[key]["Screenshot"] = r.get("Screenshot")
+                        if r.get("Elapsed") and str(r.get("Elapsed")) != "nan":
+                            master_map[key]["Elapsed"] = r.get("Elapsed")
+                        if r.get("App") and str(r.get("App")) != "nan":
+                            master_map[key]["App"] = r.get("App")
+                print(f"[RESTORE] Overlaid saved results from {REPORT_FILE}")
+            except Exception as ex:
+                print(f"[RESTORE] Could not read report file (ignored): {ex}")
 
         res = list(master_map.values())
         _state["results"] = res
@@ -70,7 +76,7 @@ def _restore_state():
         _state["pass"] = sum(1 for r in res if r.get("Status") == "Passed")
         _state["fail"] = sum(1 for r in res if r.get("Status") == "Failed")
         _state["skip"] = sum(1 for r in res if r.get("Status") == "Skipped")
-        print(f"[RESTORE] Restored {len(res)} results from {REPORT_FILE} (Passed: {_state['pass']}, Failed: {_state['fail']})")
+        print(f"[RESTORE] Loaded {len(res)} test cases (Passed: {_state['pass']}, Failed: {_state['fail']}, Pending: {len(res)-_state['done']})")
     except Exception as e:
         print(f"[RESTORE ERROR] {e}")
 
