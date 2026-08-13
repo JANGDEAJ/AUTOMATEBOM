@@ -288,9 +288,13 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
 
             # 3.3 Fill Tax Invoice Date / Tax Invoice Date (required when Tax Invoice is checked)
             cb("Filling Tax Invoice Date")
-            tax_date_inp = page.locator("div[name='tax_invoice_date'] input, div[name='date_invoice'] input, input[name='tax_invoice_date']").first
+            tax_date_inp = page.locator("div[name='tax_invoice_date'] input, input[name='tax_invoice_date'], div[name='date_invoice'] input, .o_datepicker input").first
             if tax_date_inp.is_visible(timeout=1500):
+                import datetime
+                today_str = datetime.datetime.now().strftime("%m/%d/%Y")
                 tax_date_inp.click()
+                time.sleep(0.3)
+                tax_date_inp.fill(today_str)
                 time.sleep(0.3)
                 page.keyboard.press("Enter")
                 time.sleep(0.5)
