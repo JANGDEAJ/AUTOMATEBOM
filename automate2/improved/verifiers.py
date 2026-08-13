@@ -211,8 +211,126 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         cb(f"Create check failed: App '{app_name}' icon not found for role {role}")
         return ("Failed", f"App '{app_name}' icon not found or could not be opened for role {role}")
 
+    # Check if sub-menu navigation is required for Request app (My Expenses -> Petty Cash / เงินสดย่อย)
+    if app_name == "Request" or "Request" in app_name:
+        sub_name = "Petty Cash"
+        if "หัก ณ ที่จ่าย" in func_name or "Withholding" in func_name:
+            sub_name = "เงินสดย่อย (หัก ณ ที่จ่าย)"
+
+        cb(f"Navigating sub-menu: My Expenses -> {sub_name}")
+        sub_ok = navigate_submenus(page, [
+            ["My Expenses", "ค่าใช้จ่ายของฉัน"],
+            [sub_name, "Petty Cash", "วงเงินสดย่อย"]
+        ], frame_cb=frame_cb)
+
+        if not sub_ok:
+            cb(f"Create check failed: Sub-menu My Expenses -> {sub_name} not found")
+            return ("Failed", f"Sub-menu My Expenses -> {sub_name} not found in {app_name} for role {role}")
+
+        # Click New / สร้าง
+        create_btn = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
+        if not create_btn.is_visible(timeout=3000):
+            cb(f"Create check failed: New/สร้าง button not found in {sub_name} page")
+            return ("Failed", f"New/สร้าง button not found in {sub_name} page for role {role}")
+
+        cb(f"Clicking New/สร้าง on {sub_name} page")
+        create_btn.click()
+        time.sleep(2)
+
+        try:
+            import os, random
+            ref_str = f"REQ-EXP-{random.randint(100, 999)}"
+
+            # 1. Fill Description
+            cb("Filling Description")
+            desc_inp = page.locator("div[name='name'] input, input[name='name'], textarea[name='name']").first
+            if desc_inp.is_visible(timeout=2000):
+                desc_inp.fill(ref_str)
+                time.sleep(0.5)
+
+            # 2. Fill Category dropdown
+            cb("Filling Category dropdown")
+            cat_inp = page.locator("div[name='product_id'] input, div[name='category_id'] input").first
+            if cat_inp.is_visible(timeout=1500):
+                cat_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(0.5)
+
+            # 3. Fill Total Amount if present
+            cb("Filling Total Amount")
+            total_inp = page.locator("div[name='total_amount'] input, div[name='unit_amount'] input, input[name='unit_amount']").first
+            if total_inp.is_visible(timeout=1500):
+                total_inp.click()
+                time.sleep(0.3)
+                total_inp.fill("500")
+                time.sleep(0.5)
+
+            # 4. Click Save manually
+            cb("Clicking Save button manually")
+            save_btn = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+            if save_btn.is_visible(timeout=2000):
+                save_btn.click()
+                time.sleep(2)
+
+            # 5. Click ATTACH RECEIPT if present
+            cb("Handling ATTACH RECEIPT")
+            attach_btn = page.locator("button:has-text('ATTACH RECEIPT'), button:has-text('แนบใบเสร็จ')").first
+            if attach_btn.is_visible(timeout=2000):
+                # Check for hidden file input or click attach button
+                file_inputs = page.locator("input[type='file']")
+                if file_inputs.count() > 0:
+                    # Upload an existing screenshot asset as attachment
+                    sample_asset = os.path.abspath("c:/Users/gaykn/Downloads/automate2/AUTOMATEBOM/automate2/improved/config.py")
+                    try:
+                        file_inputs.first.set_input_files(sample_asset)
+                        time.sleep(1.5)
+                    except Exception:
+                        attach_btn.click()
+                        time.sleep(1)
+                else:
+                    attach_btn.click()
+                    time.sleep(1)
+
+            # 6. Click SUBMIT TO MANAGER
+            cb("Clicking SUBMIT TO MANAGER button")
+            submit_btn = page.locator("button:has-text('SUBMIT TO MANAGER'), button:has-text('ส่งให้ผู้จัดการ')").first
+            if submit_btn.is_visible(timeout=2000):
+                submit_btn.click()
+                time.sleep(2)
+
+            # Handle modal OK dialog if present
+            ok_btn = page.locator(".modal button:has-text('OK'), .modal button:has-text('ตกลง')").first
+            if ok_btn.is_visible(timeout=1500):
+                ok_btn.click()
+                time.sleep(1)
+
+            # 7. Go back to list view
+            cb(f"Returning to {sub_name} list view")
+            b_crumb = page.locator("a.breadcrumb-item:has-text('My Expenses'), a.breadcrumb-item:has-text('Petty Cash'), .breadcrumb a").first
+            if b_crumb.is_visible(timeout=2000):
+                b_crumb.click()
+            else:
+                navigate_submenus(page, [["My Expenses", "ค่าใช้จ่ายของฉัน"], [sub_name, "Petty Cash"]], frame_cb=frame_cb)
+            time.sleep(2)
+
+            # 8. Check if record appears in list table
+            in_list = page.locator(f"table:has-text('{ref_str}'), tr:has-text('{ref_str}'), .o_list_table:has-text('{ref_str}')").count() > 0
+            if in_list:
+                cb(f"Create PASSED: Found expense '{ref_str}' in table list")
+                return ("Passed", f"Created expense '{ref_str}' successfully in My Expenses -> {sub_name} for role {role}")
+            else:
+                cb(f"Create FAILED: Expense '{ref_str}' not found in table list")
+                return ("Failed", f"Expense '{ref_str}' created but not found in {sub_name} table for role {role}")
+
+        except Exception as e:
+            cb(f"Create FAILED during Request expense workflow: {e}")
+            return ("Failed", f"Error during Request expense creation workflow for role {role}: {e}")
+
     # Check if sub-menu navigation is required for Petty Cash Fund (วงเงินสดย่อย)
-    if any(kw in func_name for kw in ["สดย่อย", "Petty Cash", "Petty Cash Fund", "petty cash"]):
+    elif any(kw in func_name for kw in ["สดย่อย", "Petty Cash", "Petty Cash Fund", "petty cash"]):
         cb("Navigating sub-menu: Expenses -> Petty Cash Fund")
         sub_ok = navigate_submenus(page, [
             ["Expenses", "ค่าใช้จ่าย"],
