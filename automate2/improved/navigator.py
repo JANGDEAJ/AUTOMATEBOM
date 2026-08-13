@@ -33,15 +33,19 @@ def open_app(page, app_name: str, frame_cb=None) -> bool:
         # 1. Look for app icon directly on current dashboard page
         clicked = False
         for alias in aliases:
-            loc = page.get_by_text(alias, exact=True)
-            for i in range(loc.count()):
-                elem = loc.nth(i)
-                if elem.is_visible():
-                    cb(f"Clicking app icon '{alias}'")
-                    elem.click()
-                    live_wait(page, cb, 2.5, f"Opening {alias}...")
-                    cb(f"Opened {alias}")
-                    clicked = True
+            # Try exact match first, then partial match
+            for exact in [True, False]:
+                loc = page.get_by_text(alias, exact=exact)
+                for i in range(loc.count()):
+                    elem = loc.nth(i)
+                    if elem.is_visible():
+                        cb(f"Clicking app icon '{alias}'")
+                        elem.click()
+                        live_wait(page, cb, 2.5, f"Opening {alias}...")
+                        cb(f"Opened {alias}")
+                        clicked = True
+                        break
+                if clicked:
                     break
             if clicked:
                 break
@@ -55,15 +59,18 @@ def open_app(page, app_name: str, frame_cb=None) -> bool:
                 live_wait(page, cb, 1.0, "Opened App Drawer")
 
                 for alias in aliases:
-                    loc = page.get_by_text(alias, exact=True)
-                    for i in range(loc.count()):
-                        elem = loc.nth(i)
-                        if elem.is_visible():
-                            cb(f"Clicking app icon '{alias}'")
-                            elem.click()
-                            live_wait(page, cb, 2.5, f"Opening {alias}...")
-                            cb(f"Opened {alias}")
-                            clicked = True
+                    for exact in [True, False]:
+                        loc = page.get_by_text(alias, exact=exact)
+                        for i in range(loc.count()):
+                            elem = loc.nth(i)
+                            if elem.is_visible():
+                                cb(f"Clicking app icon '{alias}'")
+                                elem.click()
+                                live_wait(page, cb, 2.5, f"Opening {alias}...")
+                                cb(f"Opened {alias}")
+                                clicked = True
+                                break
+                        if clicked:
                             break
                     if clicked:
                         break
