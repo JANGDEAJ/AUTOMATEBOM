@@ -306,10 +306,10 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
                 ref_inp.fill(ref_str)
                 time.sleep(0.5)
 
-            # Fill ประเภทการทำจ่าย (payment_type / payment_type_id)
+            # Fill ประเภทการทำจ่าย (thp_ap_type_id)
             cb("Filling ประเภทการทำจ่าย dropdown")
-            ptype_inp = page.locator("div[name='payment_type_id'] input, div[name='payment_type'] input, div[name='pay_type'] input").first
-            if ptype_inp.is_visible(timeout=1500):
+            ptype_inp = page.locator("div[name='thp_ap_type_id'] input, input[id*='thp_ap_type_id'], .o_field_widget[name='thp_ap_type_id'] input").first
+            if ptype_inp.is_visible(timeout=2000):
                 ptype_inp.click()
                 time.sleep(0.5)
                 page.keyboard.press("ArrowDown")
