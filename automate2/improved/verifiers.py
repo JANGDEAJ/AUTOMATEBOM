@@ -244,6 +244,121 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         create_btn.click()
         time.sleep(2)
 
+    # Check if sub-menu navigation is required for Payments (การบันทึกรับชำระเงิน / Payments)
+    elif "รับชำระ" in func_name or "Payment" in func_name or "Payments" in func_name:
+        cb("Navigating sub-menu: Customers -> Payments")
+        sub_ok = navigate_submenus(page, [
+            ["Customers", "ลูกค้า"],
+            ["Payments", "การชำระเงิน", "การบันทึกรับชำระเงิน", "ชำระเงิน"]
+        ], frame_cb=frame_cb)
+
+        if not sub_ok:
+            cb("Create check failed: Sub-menu Customers -> Payments not found")
+            return ("Failed", f"Sub-menu Customers -> Payments not found in {app_name} for role {role}")
+
+        # Click New / สร้าง
+        create_btn = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
+        if not create_btn.is_visible(timeout=3000):
+            cb("Create check failed: New/สร้าง button not found in Payments page")
+            return ("Failed", f"New/สร้าง button not found in Payments page for role {role}")
+
+        cb("Clicking New/สร้าง on Payments page")
+        create_btn.click()
+        time.sleep(2)
+
+        try:
+            # 1. Fill Customer (ลูกค้า)
+            cb("Filling Customer dropdown")
+            customer_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id'], .o_field_widget[name='partner_id'] input").first
+            if customer_inp.is_visible(timeout=2000):
+                customer_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(1)
+
+            # 2. Fill Amount (จำนวนเงิน) if required/present
+            cb("Filling Amount")
+            amt_inp = page.locator("div[name='amount'] input, input[name='amount']").first
+            if amt_inp.is_visible(timeout=1500):
+                amt_inp.click()
+                amt_inp.fill("100")
+                time.sleep(0.5)
+
+            # 3. Fill Memo/Ref (การอ้างอิง)
+            cb("Filling Memo/Ref text field")
+            import random
+            ref_str = f"PAY-AUTO-{random.randint(100, 999)}"
+            ref_inp = page.locator("div[name='memo'] input, div[name='ref'] input, input[name='memo'], input[name='ref']").first
+            if ref_inp.is_visible(timeout=1500):
+                ref_inp.fill(ref_str)
+                time.sleep(0.5)
+
+            # 4. Click Save manually
+            cb("Clicking Save button manually")
+            save_btn = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+            if save_btn.is_visible(timeout=2000):
+                save_btn.click()
+                time.sleep(2)
+
+            # 5. Click CONFIRM
+            cb("Clicking Confirm button")
+            confirm_btn = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button.btn-primary:has-text('Confirm')").first
+            if confirm_btn.is_visible(timeout=2000):
+                confirm_btn.click()
+                time.sleep(2)
+
+            # Handle modal OK dialog if present
+            ok_btn = page.locator(".modal button:has-text('OK'), .modal button:has-text('ตกลง')").first
+            if ok_btn.is_visible(timeout=1500):
+                ok_btn.click()
+                time.sleep(1)
+
+            # Extract created payment serial number (e.g. CSH1/..., BNK1/..., CUST.IN/...)
+            rec_num = ""
+            try:
+                for sel in [".o_last_breadcrumb_item", "h1:has-text('CUST.IN')", "h1:has-text('BNK')", "h1:has-text('CSH')", ".breadcrumb-item.active"]:
+                    elem = page.locator(sel).first
+                    if elem.is_visible(timeout=1000):
+                        text = elem.inner_text()
+                        for word in text.split():
+                            if "/" in word or "PAY" in word or "CUST" in word or "CSH" in word or "BNK" in word:
+                                rec_num = word.strip()
+                                break
+                        if rec_num:
+                            break
+                        if text and not rec_num:
+                            rec_num = text.strip().split("\n")[0]
+                            break
+            except Exception:
+                pass
+
+            cb(f"Created Payment Serial: '{rec_num}'")
+
+            # 6. Go back to Payments list view
+            cb("Returning to Payments list view")
+            b_crumb = page.locator("a.breadcrumb-item:has-text('Payments'), a.breadcrumb-item:has-text('การชำระเงิน'), .breadcrumb a:has-text('Payments')").first
+            if b_crumb.is_visible(timeout=2000):
+                b_crumb.click()
+            else:
+                navigate_submenus(page, [["Customers", "ลูกค้า"], ["Payments", "การชำระเงิน"]], frame_cb=frame_cb)
+            time.sleep(2)
+
+            # 7. Check if serial number or reference appears in table list
+            target_str = rec_num if rec_num else ref_str
+            in_list = page.locator(f"table:has-text('{target_str}'), tr:has-text('{target_str}'), .o_list_table:has-text('{target_str}')").count() > 0
+            if in_list:
+                cb(f"Create PASSED: Found payment '{target_str}' in table list")
+                return ("Passed", f"Created payment '{target_str}' successfully and verified in Payments table for role {role}")
+            else:
+                cb(f"Create FAILED: Payment '{target_str}' not found in table list")
+                return ("Failed", f"Payment '{target_str}' created but not found in Payments list table for role {role}")
+
+        except Exception as e:
+            cb(f"Create FAILED during payment creation workflow: {e}")
+            return ("Failed", f"Error during Payment creation workflow for role {role}: {e}")
+
         try:
             # 1. Fill ลูกค้าที่มาติดต่อ (Customer)
             cb("Filling ลูกค้าที่มาติดต่อ dropdown")
