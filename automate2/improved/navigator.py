@@ -28,7 +28,15 @@ def open_app(page, app_name: str, frame_cb=None) -> bool:
             page.goto(DASHBOARD_URL, wait_until="domcontentloaded")
             live_wait(page, cb, 1.0, "Open browser home page")
 
-        aliases = APP_ALIASES.get(app_name, [app_name])
+        aliases = APP_ALIASES.get(app_name, [])
+        if not aliases:
+            # Reverse lookup: check if app_name is contained in any key's alias list
+            for key, val_list in APP_ALIASES.items():
+                if app_name == key or any(app_name in v or v in app_name for v in val_list):
+                    aliases = [key] + val_list
+                    break
+        if not aliases:
+            aliases = [app_name]
 
         # 1. Look for app icon directly on current dashboard page
         clicked = False
