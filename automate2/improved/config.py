@@ -33,7 +33,7 @@ APP_ALIASES = {
     "Accounting":    ["การบัญชี", "Accounting", "การเงิน"],
     "Purchase":      ["การจัดซื้อ", "Purchase"],
     "Inventory":     ["คลังสินค้า", "Inventory"],
-    "Request":       ["การเบิกค่าใช้จ่าย", "Request", "Expenses", "My Expenses"],
+    "Request":       ["การเบิกค่าใช้จ่าย", "Request", "Expenses", "My Expenses", "การขอเบิกค่าใช้จ่ายต่างๆ (Expense)", "Expense"],
     "Fleet":         ["การขนส่ง", "Fleet", "ยานพาหนะ", "พรบ."],
     "MPOS":          ["MPOS", "ข้อมูลปณอ."],
     "Contacts":      ["การติดต่อ", "Contacts"],

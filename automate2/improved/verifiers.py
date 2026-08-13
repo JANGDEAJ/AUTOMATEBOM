@@ -212,7 +212,7 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         return ("Failed", f"App '{app_name}' icon not found or could not be opened for role {role}")
 
     # Check if sub-menu navigation is required for Request app (My Expenses -> Petty Cash / เงินสดย่อย)
-    if app_name == "Request" or "Request" in app_name:
+    if any(k in app_name for k in ["Request", "Expense", "ค่าใช้จ่าย"]):
         sub_name = "Petty Cash"
         if "หัก ณ ที่จ่าย" in func_name or "Withholding" in func_name:
             sub_name = "เงินสดย่อย (หัก ณ ที่จ่าย)"
