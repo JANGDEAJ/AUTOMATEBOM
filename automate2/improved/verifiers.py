@@ -306,6 +306,17 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
                 ref_inp.fill(ref_str)
                 time.sleep(0.5)
 
+            # Fill ประเภทการทำจ่าย (payment_type / payment_type_id)
+            cb("Filling ประเภทการทำจ่าย dropdown")
+            ptype_inp = page.locator("div[name='payment_type_id'] input, div[name='payment_type'] input, div[name='pay_type'] input").first
+            if ptype_inp.is_visible(timeout=1500):
+                ptype_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(0.5)
+
             save_btn2 = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
             if save_btn2.is_visible(timeout=2000):
                 save_btn2.click()
