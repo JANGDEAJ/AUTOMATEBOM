@@ -268,6 +268,33 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
                 total_inp.fill("500")
                 time.sleep(0.5)
 
+            # 3.1 Fill Partner / พาร์ทเนอร์ (required when Tax Invoice is checked)
+            cb("Filling Partner dropdown")
+            partner_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id']").first
+            if partner_inp.is_visible(timeout=1500):
+                partner_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(0.5)
+
+            # 3.2 Fill Bill Reference / การอ้างอิง (required when Tax Invoice is checked)
+            cb("Filling Bill Reference")
+            ref_inp = page.locator("div[name='reference'] input, div[name='ref'] input, input[name='reference'], input[name='ref']").first
+            if ref_inp.is_visible(timeout=1500):
+                ref_inp.fill(f"REF-{random.randint(100, 999)}")
+                time.sleep(0.5)
+
+            # 3.3 Fill Tax Invoice Date / Tax Invoice Date (required when Tax Invoice is checked)
+            cb("Filling Tax Invoice Date")
+            tax_date_inp = page.locator("div[name='tax_invoice_date'] input, div[name='date_invoice'] input, input[name='tax_invoice_date']").first
+            if tax_date_inp.is_visible(timeout=1500):
+                tax_date_inp.click()
+                time.sleep(0.3)
+                page.keyboard.press("Enter")
+                time.sleep(0.5)
+
             # 4. Click Save manually
             cb("Clicking Save button manually")
             save_btn = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
