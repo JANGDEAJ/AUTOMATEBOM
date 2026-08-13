@@ -284,6 +284,15 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
                 page.keyboard.press("Enter")
                 time.sleep(0.5)
 
+            # 5.5 Fill Max Fund Amount / money amount (required > 0)
+            cb("Filling Max Fund Amount")
+            max_amt_inp = page.locator("div[name='max_fund_amount'] input, div[name='max_amount'] input, div[name='amount'] input, div[name='max_limit'] input, div[name='limit_payment_amount'] input").first
+            if max_amt_inp.is_visible(timeout=1500):
+                max_amt_inp.click()
+                time.sleep(0.3)
+                max_amt_inp.fill("1000")
+                time.sleep(0.5)
+
             # 6. Click Save manually
             cb("Clicking Save button manually")
             save_btn = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
