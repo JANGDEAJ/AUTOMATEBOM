@@ -310,12 +310,19 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
             cb("Filling ประเภทการทำจ่าย dropdown")
             ptype_inp = page.locator("div[name='thp_ap_type_id'] input, input[id*='thp_ap_type_id'], .o_field_widget[name='thp_ap_type_id'] input").first
             if ptype_inp.is_visible(timeout=2000):
-                ptype_inp.click()
-                time.sleep(0.5)
-                page.keyboard.press("ArrowDown")
-                time.sleep(0.5)
-                page.keyboard.press("Enter")
-                time.sleep(0.5)
+                ptype_inp.click(force=True)
+                time.sleep(0.8)
+                items = page.locator(".o-autocomplete--dropdown-menu li a, ul.ui-autocomplete li a, .dropdown-item").all()
+                for it in items:
+                    try:
+                        if it.is_visible():
+                            txt = it.inner_text().strip()
+                            if txt and "typing" not in txt and "Search" not in txt:
+                                it.click(force=True)
+                                time.sleep(0.5)
+                                break
+                    except Exception:
+                        pass
 
             save_btn2 = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
             if save_btn2.is_visible(timeout=2000):
