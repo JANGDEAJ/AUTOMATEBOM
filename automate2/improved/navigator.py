@@ -21,12 +21,17 @@ def open_app(page, app_name: str, frame_cb=None) -> bool:
             except Exception: pass
 
     try:
-        base_url = page.url.split("?")[0].split("#")[0].rstrip("/")
-        target_base = DASHBOARD_URL.rstrip("/")
-        if base_url != target_base:
-            cb("Open browser home page")
-            page.goto(DASHBOARD_URL, wait_until="domcontentloaded")
-            live_wait(page, cb, 1.0, "Open browser home page")
+        # Always go to DASHBOARD_URL to ensure we are on the main App Grid, not inside a sub-app view
+        if not page.locator(".o_apps, .o_app").first.is_visible(timeout=1000):
+            drawer = page.locator(SEL_APP_DRAWER).first
+            if drawer.is_visible(timeout=1500):
+                cb("Opening App Drawer")
+                drawer.click()
+                live_wait(page, cb, 1.0, "Opened App Drawer")
+            else:
+                cb("Open browser home page")
+                page.goto(DASHBOARD_URL, wait_until="domcontentloaded")
+                live_wait(page, cb, 1.5, "Open browser home page")
 
         aliases = APP_ALIASES.get(app_name, [])
         if not aliases:
