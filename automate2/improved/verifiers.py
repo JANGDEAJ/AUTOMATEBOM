@@ -516,6 +516,115 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
             cb(f"Create FAILED during petty cash fund creation workflow: {e}")
             return ("Failed", f"Error during Petty Cash Fund creation workflow for role {role}: {e}")
 
+    # Check if sub-menu navigation is required for Withholding Tax (การบริหารภาษีหัก ณ ที่จ่าย)
+    elif "หัก ณ ที่จ่าย" in func_name or "Withholding Tax" in func_name or "Withholding" in func_name:
+        cb("Navigating sub-menu: Vendors -> Withholding Tax")
+        sub_ok = navigate_submenus(page, [
+            ["Vendors", "ผู้ขาย"],
+            ["Withholding Tax", "ภาษีหัก ณ ที่จ่าย", "บริหารภาษีหัก ณ ที่จ่าย"]
+        ], frame_cb=frame_cb)
+
+        if not sub_ok:
+            cb("Create check failed: Sub-menu Vendors -> Withholding Tax not found")
+            return ("Failed", f"Sub-menu Vendors -> Withholding Tax not found in {app_name} for role {role}")
+
+        # Click New / สร้าง
+        create_btn = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
+        if not create_btn.is_visible(timeout=3000):
+            cb("Create check failed: New/สร้าง button not found in Withholding Tax page")
+            return ("Failed", f"New/สร้าง button not found in Withholding Tax page for role {role}")
+
+        cb("Clicking New/สร้าง on Withholding Tax page")
+        create_btn.click()
+        time.sleep(2)
+
+        try:
+            import random
+            ref_str = f"WHT-REF-{random.randint(100, 999)}"
+
+            # 1. Fill Vendor / Partner dropdown
+            cb("Filling Vendor dropdown")
+            vendor_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id'], .o_field_widget[name='partner_id'] input").first
+            if vendor_inp.is_visible(timeout=2000):
+                vendor_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(1)
+
+            # 2. Fill Bill Reference / Payment Reference
+            cb("Filling Bill Reference")
+            ref_inp = page.locator("div[name='ref'] input, input[name='ref'], div[name='payment_reference'] input").first
+            if ref_inp.is_visible(timeout=1500):
+                ref_inp.fill(ref_str)
+                time.sleep(0.5)
+
+            # 3. Click Save manually
+            cb("Clicking Save button manually")
+            save_btn = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+            if save_btn.is_visible(timeout=2000):
+                save_btn.click()
+                time.sleep(2)
+
+            # Check for validation error notification after save
+            err_notif = page.locator(".o_notification_manager .o_notification.bg-danger, .o_error_dialog, .modal-body:has-text('Invalid')").first
+            if err_notif.is_visible(timeout=1500):
+                err_text = err_notif.inner_text()
+                cb(f"Save blocked by validation error: {err_text}")
+                return ("Failed", f"Save failed — form requires mandatory fields: {err_text.strip()} (role {role})")
+
+            # 4. Click CONFIRM / Post button if present
+            cb("Clicking Confirm/Post button")
+            confirm_btn = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button:has-text('Post'), button.btn-primary").first
+            if confirm_btn.is_visible(timeout=2000):
+                confirm_btn.click()
+                time.sleep(2)
+
+            # Handle modal OK dialog if present
+            ok_btn = page.locator(".modal button:has-text('OK'), .modal button:has-text('ตกลง')").first
+            if ok_btn.is_visible(timeout=1500):
+                ok_btn.click()
+                time.sleep(1)
+
+            # 5. Extract created serial from breadcrumb
+            rec_num = ""
+            try:
+                for sel in [".o_last_breadcrumb_item", ".breadcrumb-item.active"]:
+                    elem = page.locator(sel).first
+                    if elem.is_visible(timeout=1000):
+                        text = elem.inner_text().strip()
+                        if text and text not in ["New", "สร้าง", "Draft"]:
+                            rec_num = text.split("\n")[0]
+                            break
+            except Exception:
+                pass
+
+            cb(f"Created Withholding Tax record: '{rec_num}'")
+
+            # 6. Go back to Withholding Tax list view
+            cb("Returning to Withholding Tax list view")
+            b_crumb = page.locator("a.breadcrumb-item:has-text('Withholding Tax'), a.breadcrumb-item:has-text('ภาษีหัก ณ ที่จ่าย'), .breadcrumb a").first
+            if b_crumb.is_visible(timeout=2000):
+                b_crumb.click()
+            else:
+                navigate_submenus(page, [["Vendors", "ผู้ขาย"], ["Withholding Tax", "ภาษีหัก ณ ที่จ่าย"]], frame_cb=frame_cb)
+            time.sleep(2)
+
+            # 7. Check if record appears in list table
+            target_str = rec_num if rec_num else ref_str
+            in_list = page.locator(f"table:has-text('{target_str}'), tr:has-text('{target_str}'), .o_list_table:has-text('{target_str}')").count() > 0
+            if in_list:
+                cb(f"Create PASSED: Found withholding tax '{target_str}' in table list")
+                return ("Passed", f"Created withholding tax '{target_str}' successfully in Vendors -> Withholding Tax for role {role}")
+            else:
+                cb(f"Create FAILED: Withholding tax '{target_str}' not found in table list")
+                return ("Failed", f"Withholding tax '{target_str}' created but not found in Withholding Tax list table for role {role}")
+
+        except Exception as e:
+            cb(f"Create FAILED during withholding tax workflow: {e}")
+            return ("Failed", f"Error during Withholding Tax creation workflow for role {role}: {e}")
+
     # Check if sub-menu navigation is required for Credit Notes (ใบลดหนี้)
     elif "ใบลดหนี้" in func_name or "Credit Note" in func_name or "Credit Notes" in func_name:
         cb("Navigating sub-menu: Customers -> Credit Notes")
