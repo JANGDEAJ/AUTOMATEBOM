@@ -244,8 +244,8 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         create_btn.click()
         time.sleep(2)
 
-    # Check if sub-menu navigation is required for Petty Cash Fund (วงเงินสดย่อย / Petty Cash)
-    elif "วงเงินสดย่อย" in func_name or "Petty Cash" in func_name or "Petty Cash Fund" in func_name or "เพิ่มวงเงินสดย่อย" in func_name:
+    # Check if sub-menu navigation is required for Petty Cash Fund (วงเงินสดย่อย)
+    elif any(kw in func_name for kw in ["สดย่อย", "Petty Cash", "Petty Cash Fund", "petty cash"]):
         cb("Navigating sub-menu: Expenses -> Petty Cash Fund")
         sub_ok = navigate_submenus(page, [
             ["Expenses", "ค่าใช้จ่าย"],
@@ -267,44 +267,73 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         time.sleep(2)
 
         try:
-            # 1. Fill Name / Description if present
-            cb("Filling Name/Description text field")
             import random
             ref_str = f"PETTY-AUTO-{random.randint(100, 999)}"
-            name_inp = page.locator("div[name='name'] input, input[name='name'], div[name='description'] input, input[name='description']").first
+
+            # 1. Fill Name (วงเงินสดย่อย header)
+            cb("Filling Name")
+            name_inp = page.locator("div[name='name'] input, input[name='name']").first
             if name_inp.is_visible(timeout=2000):
                 name_inp.fill(ref_str)
                 time.sleep(0.5)
 
-            # 2. Fill Employee / Custodian / Partner dropdown if present
-            cb("Filling Employee/Custodian dropdown")
-            emp_inp = page.locator("div[name='employee_id'] input, div[name='partner_id'] input, div[name='user_id'] input").first
-            if emp_inp.is_visible(timeout=1500):
-                emp_inp.click()
+            # 2. Fill Owner (required)
+            cb("Filling Owner dropdown")
+            owner_inp = page.locator("div[name='owner_id'] input, div[name='user_id'] input").first
+            if owner_inp.is_visible(timeout=1500):
+                owner_inp.click()
                 time.sleep(0.5)
                 page.keyboard.press("ArrowDown")
                 time.sleep(0.5)
                 page.keyboard.press("Enter")
                 time.sleep(1)
 
-            # 3. Fill Amount / Fund Limit if present
-            cb("Filling Amount/Limit")
-            amt_inp = page.locator("div[name='amount'] input, div[name='limit'] input, div[name='max_limit'] input").first
-            if amt_inp.is_visible(timeout=1500):
-                amt_inp.click()
-                amt_inp.fill("1000")
+            # 3. Fill Payment Journal (required)
+            cb("Filling Payment Journal dropdown")
+            journal_inp = page.locator("div[name='journal_id'] input, div[name='payment_journal_id'] input").first
+            if journal_inp.is_visible(timeout=1500):
+                journal_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
                 time.sleep(0.5)
 
-            # 4. Click Save manually
+            # 4. Fill Payment Code (required)
+            cb("Filling Payment Code")
+            code_inp = page.locator("div[name='payment_code'] input, div[name='code'] input, input[name='payment_code']").first
+            if code_inp.is_visible(timeout=1500):
+                code_inp.fill(f"PC-{random.randint(100,999)}")
+                time.sleep(0.5)
+
+            # 5. Fill Account (required)
+            cb("Filling Account dropdown")
+            acc_inp = page.locator("div[name='account_id'] input").first
+            if acc_inp.is_visible(timeout=1500):
+                acc_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(0.5)
+
+            # 6. Click Save manually
             cb("Clicking Save button manually")
             save_btn = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
             if save_btn.is_visible(timeout=2000):
                 save_btn.click()
                 time.sleep(2)
 
-            # 5. Click CONFIRM / APPROVE if present
-            cb("Clicking Confirm/Approve button")
-            confirm_btn = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button:has-text('Approve'), button:has-text('อนุมัติ'), button.btn-primary").first
+            # Check for validation error notification after save
+            err_notif = page.locator(".o_notification_manager .o_notification.bg-danger, .o_error_dialog, .modal-body:has-text('Invalid')").first
+            if err_notif.is_visible(timeout=1500):
+                err_text = err_notif.inner_text()
+                cb(f"Save blocked by validation error: {err_text}")
+                return ("Failed", f"Save failed — form requires mandatory fields that could not be filled automatically: {err_text.strip()} (role {role})")
+
+            # 7. Click CONFIRM / Send to Approve
+            cb("Clicking Confirm/ส่งคำขอ button")
+            confirm_btn = page.locator("button:has-text('ส่งคำขอ'), button:has-text('Confirm'), button:has-text('ยืนยัน'), button:has-text('Approve'), button:has-text('อนุมัติ')").first
             if confirm_btn.is_visible(timeout=2000):
                 confirm_btn.click()
                 time.sleep(2)
@@ -315,28 +344,22 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
                 ok_btn.click()
                 time.sleep(1)
 
-            # Extract created serial/code
+            # 8. Extract created serial/name from breadcrumb
             rec_num = ""
             try:
-                for sel in [".o_last_breadcrumb_item", "h1:has-text('PC')", "h1:has-text('PETTY')", ".breadcrumb-item.active"]:
+                for sel in [".o_last_breadcrumb_item", ".breadcrumb-item.active"]:
                     elem = page.locator(sel).first
                     if elem.is_visible(timeout=1000):
-                        text = elem.inner_text()
-                        for word in text.split():
-                            if "PC" in word or "PETTY" in word or "/" in word:
-                                rec_num = word.strip()
-                                break
-                        if rec_num:
-                            break
-                        if text and not rec_num:
-                            rec_num = text.strip().split("\n")[0]
+                        text = elem.inner_text().strip()
+                        if text and text not in ["New", "สร้าง"]:
+                            rec_num = text.split("\n")[0]
                             break
             except Exception:
                 pass
 
-            cb(f"Created Petty Cash Serial: '{rec_num}'")
+            cb(f"Created Petty Cash record: '{rec_num}'")
 
-            # 6. Go back to Petty Cash Fund list view
+            # 9. Go back to Petty Cash Fund list view
             cb("Returning to Petty Cash Fund list view")
             b_crumb = page.locator("a.breadcrumb-item:has-text('Petty Cash'), a.breadcrumb-item:has-text('วงเงินสดย่อย'), .breadcrumb a:has-text('Petty Cash')").first
             if b_crumb.is_visible(timeout=2000):
@@ -345,7 +368,7 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
                 navigate_submenus(page, [["Expenses", "ค่าใช้จ่าย"], ["Petty Cash Fund", "วงเงินสดย่อย"]], frame_cb=frame_cb)
             time.sleep(2)
 
-            # 7. Check if serial number or reference appears in table list
+            # 10. Check if record name or ref appears in table list
             target_str = rec_num if rec_num else ref_str
             in_list = page.locator(f"table:has-text('{target_str}'), tr:has-text('{target_str}'), .o_list_table:has-text('{target_str}')").count() > 0
             if in_list:
