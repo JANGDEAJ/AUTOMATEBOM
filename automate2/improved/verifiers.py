@@ -245,7 +245,7 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         time.sleep(2)
 
     # Check if sub-menu navigation is required for Petty Cash Fund (วงเงินสดย่อย / Petty Cash)
-    elif "วงเงินสดย่อย" in func_name or "Petty Cash" in func_name or "Petty Cash Fund" in func_name:
+    elif "วงเงินสดย่อย" in func_name or "Petty Cash" in func_name or "Petty Cash Fund" in func_name or "เพิ่มวงเงินสดย่อย" in func_name:
         cb("Navigating sub-menu: Expenses -> Petty Cash Fund")
         sub_ok = navigate_submenus(page, [
             ["Expenses", "ค่าใช้จ่าย"],
