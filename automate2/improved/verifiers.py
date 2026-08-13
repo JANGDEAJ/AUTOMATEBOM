@@ -211,43 +211,8 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         cb(f"Create check failed: App '{app_name}' icon not found for role {role}")
         return ("Failed", f"App '{app_name}' icon not found or could not be opened for role {role}")
 
-    # Check if sub-menu navigation is required for Credit Notes (ใบลดหนี้)
-    if "ใบลดหนี้" in func_name or "Credit Note" in func_name or "Credit Notes" in func_name:
-        cb("Navigating sub-menu: Customers -> Credit Notes")
-        sub_ok = navigate_submenus(page, [
-            ["Customers", "ลูกค้า"],
-            ["Credit Notes", "ใบลดหนี้", "ใบลดหนี้ราคา"]
-        ], frame_cb=frame_cb)
-        if not sub_ok:
-            cb("Create check failed: Sub-menu Customers -> Credit Notes not found")
-            return ("Failed", f"Sub-menu Customers -> Credit Notes not found in {app_name} for role {role}")
-
-    # Check if sub-menu navigation is required for Customer Invoices (การจัดทำใบแจ้งหนี้)
-    elif "ใบแจ้งหนี้" in func_name or "Invoice" in func_name or "Invoices" in func_name:
-        cb("Navigating sub-menu: Customers -> Invoices")
-        sub_ok = navigate_submenus(page, [
-            ["Customers", "ลูกค้า"],
-            ["Invoices", "ใบแจ้งหนี้", "การจัดทำใบแจ้งหนี้"]
-        ], frame_cb=frame_cb)
-        
-        if not sub_ok:
-            cb("Create check failed: Sub-menu Customers -> Invoices not found")
-            return ("Failed", f"Sub-menu Customers -> Invoices not found in {app_name} for role {role}")
-
-        # Click New / สร้าง
-        create_btn = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
-        if not create_btn.is_visible(timeout=3000):
-            cb("Create check failed: New/สร้าง button not found in Invoices page")
-            return ("Failed", f"New/สร้าง button not found in Invoices page for role {role}")
-
-        cb("Clicking New/สร้าง on Invoices page")
-        create_btn.click()
-        time.sleep(2)
-        cb("Invoices: New form opened — returning Passed (full workflow in dedicated branch)")
-        return ("Passed", f"Found New/Create button in Customers -> Invoices for role {role}")
-
     # Check if sub-menu navigation is required for Petty Cash Fund (วงเงินสดย่อย)
-    elif any(kw in func_name for kw in ["สดย่อย", "Petty Cash", "Petty Cash Fund", "petty cash"]):
+    if any(kw in func_name for kw in ["สดย่อย", "Petty Cash", "Petty Cash Fund", "petty cash"]):
         cb("Navigating sub-menu: Expenses -> Petty Cash Fund")
         sub_ok = navigate_submenus(page, [
             ["Expenses", "ค่าใช้จ่าย"],
@@ -383,6 +348,41 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         except Exception as e:
             cb(f"Create FAILED during petty cash fund creation workflow: {e}")
             return ("Failed", f"Error during Petty Cash Fund creation workflow for role {role}: {e}")
+
+    # Check if sub-menu navigation is required for Credit Notes (ใบลดหนี้)
+    elif "ใบลดหนี้" in func_name or "Credit Note" in func_name or "Credit Notes" in func_name:
+        cb("Navigating sub-menu: Customers -> Credit Notes")
+        sub_ok = navigate_submenus(page, [
+            ["Customers", "ลูกค้า"],
+            ["Credit Notes", "ใบลดหนี้", "ใบลดหนี้ราคา"]
+        ], frame_cb=frame_cb)
+        if not sub_ok:
+            cb("Create check failed: Sub-menu Customers -> Credit Notes not found")
+            return ("Failed", f"Sub-menu Customers -> Credit Notes not found in {app_name} for role {role}")
+
+    # Check if sub-menu navigation is required for Customer Invoices (การจัดทำใบแจ้งหนี้)
+    elif "ใบแจ้งหนี้" in func_name or "Invoice" in func_name or "Invoices" in func_name:
+        cb("Navigating sub-menu: Customers -> Invoices")
+        sub_ok = navigate_submenus(page, [
+            ["Customers", "ลูกค้า"],
+            ["Invoices", "ใบแจ้งหนี้", "การจัดทำใบแจ้งหนี้"]
+        ], frame_cb=frame_cb)
+        
+        if not sub_ok:
+            cb("Create check failed: Sub-menu Customers -> Invoices not found")
+            return ("Failed", f"Sub-menu Customers -> Invoices not found in {app_name} for role {role}")
+
+        # Click New / สร้าง
+        create_btn = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
+        if not create_btn.is_visible(timeout=3000):
+            cb("Create check failed: New/สร้าง button not found in Invoices page")
+            return ("Failed", f"New/สร้าง button not found in Invoices page for role {role}")
+
+        cb("Clicking New/สร้าง on Invoices page")
+        create_btn.click()
+        time.sleep(2)
+        cb("Invoices: New form opened — returning Passed (full workflow in dedicated branch)")
+        return ("Passed", f"Found New/Create button in Customers -> Invoices for role {role}")
 
     # Check if sub-menu navigation is required for Payments (การบันทึกรับชำระเงิน / Payments)
     elif "รับชำระ" in func_name or "Payment" in func_name or "Payments" in func_name:
