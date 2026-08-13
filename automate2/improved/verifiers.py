@@ -306,23 +306,31 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
                 save_btn.click()
                 time.sleep(2)
 
+            # Dismiss any popup modal after save if present
+            for _ in range(2):
+                ok_btn = page.locator(".modal button:has-text('OK'), .modal button:has-text('ตกลง')").first
+                if ok_btn.is_visible(timeout=1000):
+                    ok_btn.click()
+                    time.sleep(1)
+
             # 5. Click ATTACH RECEIPT if present
             cb("Handling ATTACH RECEIPT")
             attach_btn = page.locator("button:has-text('ATTACH RECEIPT'), button:has-text('แนบใบเสร็จ')").first
             if attach_btn.is_visible(timeout=2000):
-                # Check for hidden file input or click attach button
                 file_inputs = page.locator("input[type='file']")
                 if file_inputs.count() > 0:
-                    # Upload an existing screenshot asset as attachment
                     sample_asset = os.path.abspath("c:/Users/gaykn/Downloads/automate2/AUTOMATEBOM/automate2/improved/config.py")
                     try:
                         file_inputs.first.set_input_files(sample_asset)
                         time.sleep(1.5)
                     except Exception:
-                        attach_btn.click()
-                        time.sleep(1)
-                else:
-                    attach_btn.click()
+                        pass
+
+            # Ensure modals are cleared before clicking SUBMIT TO MANAGER
+            for _ in range(2):
+                ok_btn = page.locator(".modal button:has-text('OK'), .modal button:has-text('ตกลง')").first
+                if ok_btn.is_visible(timeout=1000):
+                    ok_btn.click()
                     time.sleep(1)
 
             # 6. Click SUBMIT TO MANAGER
@@ -332,11 +340,12 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
                 submit_btn.click()
                 time.sleep(2)
 
-            # Handle modal OK dialog if present
-            ok_btn = page.locator(".modal button:has-text('OK'), .modal button:has-text('ตกลง')").first
-            if ok_btn.is_visible(timeout=1500):
-                ok_btn.click()
-                time.sleep(1)
+            # Handle modal OK dialog after submit if present
+            for _ in range(2):
+                ok_btn = page.locator(".modal button:has-text('OK'), .modal button:has-text('ตกลง')").first
+                if ok_btn.is_visible(timeout=1000):
+                    ok_btn.click()
+                    time.sleep(1)
 
             # 7. Go back to list view
             cb(f"Returning to {sub_name} list view")
