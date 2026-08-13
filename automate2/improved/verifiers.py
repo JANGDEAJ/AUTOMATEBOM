@@ -244,6 +244,121 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         create_btn.click()
         time.sleep(2)
 
+    # Check if sub-menu navigation is required for Petty Cash Fund (วงเงินสดย่อย / Petty Cash)
+    elif "วงเงินสดย่อย" in func_name or "Petty Cash" in func_name or "Petty Cash Fund" in func_name:
+        cb("Navigating sub-menu: Expenses -> Petty Cash Fund")
+        sub_ok = navigate_submenus(page, [
+            ["Expenses", "ค่าใช้จ่าย"],
+            ["Petty Cash Fund", "วงเงินสดย่อย", "Petty Cash"]
+        ], frame_cb=frame_cb)
+
+        if not sub_ok:
+            cb("Create check failed: Sub-menu Expenses -> Petty Cash Fund not found")
+            return ("Failed", f"Sub-menu Expenses -> Petty Cash Fund not found in {app_name} for role {role}")
+
+        # Click New / สร้าง
+        create_btn = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
+        if not create_btn.is_visible(timeout=3000):
+            cb("Create check failed: New/สร้าง button not found in Petty Cash Fund page")
+            return ("Failed", f"New/สร้าง button not found in Petty Cash Fund page for role {role}")
+
+        cb("Clicking New/สร้าง on Petty Cash Fund page")
+        create_btn.click()
+        time.sleep(2)
+
+        try:
+            # 1. Fill Name / Description if present
+            cb("Filling Name/Description text field")
+            import random
+            ref_str = f"PETTY-AUTO-{random.randint(100, 999)}"
+            name_inp = page.locator("div[name='name'] input, input[name='name'], div[name='description'] input, input[name='description']").first
+            if name_inp.is_visible(timeout=2000):
+                name_inp.fill(ref_str)
+                time.sleep(0.5)
+
+            # 2. Fill Employee / Custodian / Partner dropdown if present
+            cb("Filling Employee/Custodian dropdown")
+            emp_inp = page.locator("div[name='employee_id'] input, div[name='partner_id'] input, div[name='user_id'] input").first
+            if emp_inp.is_visible(timeout=1500):
+                emp_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(1)
+
+            # 3. Fill Amount / Fund Limit if present
+            cb("Filling Amount/Limit")
+            amt_inp = page.locator("div[name='amount'] input, div[name='limit'] input, div[name='max_limit'] input").first
+            if amt_inp.is_visible(timeout=1500):
+                amt_inp.click()
+                amt_inp.fill("1000")
+                time.sleep(0.5)
+
+            # 4. Click Save manually
+            cb("Clicking Save button manually")
+            save_btn = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+            if save_btn.is_visible(timeout=2000):
+                save_btn.click()
+                time.sleep(2)
+
+            # 5. Click CONFIRM / APPROVE if present
+            cb("Clicking Confirm/Approve button")
+            confirm_btn = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button:has-text('Approve'), button:has-text('อนุมัติ'), button.btn-primary").first
+            if confirm_btn.is_visible(timeout=2000):
+                confirm_btn.click()
+                time.sleep(2)
+
+            # Handle modal OK dialog if present
+            ok_btn = page.locator(".modal button:has-text('OK'), .modal button:has-text('ตกลง')").first
+            if ok_btn.is_visible(timeout=1500):
+                ok_btn.click()
+                time.sleep(1)
+
+            # Extract created serial/code
+            rec_num = ""
+            try:
+                for sel in [".o_last_breadcrumb_item", "h1:has-text('PC')", "h1:has-text('PETTY')", ".breadcrumb-item.active"]:
+                    elem = page.locator(sel).first
+                    if elem.is_visible(timeout=1000):
+                        text = elem.inner_text()
+                        for word in text.split():
+                            if "PC" in word or "PETTY" in word or "/" in word:
+                                rec_num = word.strip()
+                                break
+                        if rec_num:
+                            break
+                        if text and not rec_num:
+                            rec_num = text.strip().split("\n")[0]
+                            break
+            except Exception:
+                pass
+
+            cb(f"Created Petty Cash Serial: '{rec_num}'")
+
+            # 6. Go back to Petty Cash Fund list view
+            cb("Returning to Petty Cash Fund list view")
+            b_crumb = page.locator("a.breadcrumb-item:has-text('Petty Cash'), a.breadcrumb-item:has-text('วงเงินสดย่อย'), .breadcrumb a:has-text('Petty Cash')").first
+            if b_crumb.is_visible(timeout=2000):
+                b_crumb.click()
+            else:
+                navigate_submenus(page, [["Expenses", "ค่าใช้จ่าย"], ["Petty Cash Fund", "วงเงินสดย่อย"]], frame_cb=frame_cb)
+            time.sleep(2)
+
+            # 7. Check if serial number or reference appears in table list
+            target_str = rec_num if rec_num else ref_str
+            in_list = page.locator(f"table:has-text('{target_str}'), tr:has-text('{target_str}'), .o_list_table:has-text('{target_str}')").count() > 0
+            if in_list:
+                cb(f"Create PASSED: Found petty cash '{target_str}' in table list")
+                return ("Passed", f"Created petty cash '{target_str}' successfully and verified in Petty Cash Fund table for role {role}")
+            else:
+                cb(f"Create FAILED: Petty cash '{target_str}' not found in table list")
+                return ("Failed", f"Petty cash '{target_str}' created but not found in Petty Cash Fund list table for role {role}")
+
+        except Exception as e:
+            cb(f"Create FAILED during petty cash fund creation workflow: {e}")
+            return ("Failed", f"Error during Petty Cash Fund creation workflow for role {role}: {e}")
+
     # Check if sub-menu navigation is required for Payments (การบันทึกรับชำระเงิน / Payments)
     elif "รับชำระ" in func_name or "Payment" in func_name or "Payments" in func_name:
         cb("Navigating sub-menu: Customers -> Payments")
