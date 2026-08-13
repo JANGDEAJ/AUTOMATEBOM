@@ -211,8 +211,142 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         cb(f"Create check failed: App '{app_name}' icon not found for role {role}")
         return ("Failed", f"App '{app_name}' icon not found or could not be opened for role {role}")
 
+    # Check if sub-menu navigation is required for Contract Guarantee Deposit (การจัดทำวางเงินประกันสัญญา: Invoices + Bills)
+    if "ประกันสัญญา" in func_name or "Guarantee Deposit" in func_name:
+        cb("Starting dual create test: 1) Customers -> Invoices, 2) Vendors -> Bills")
+        import random
+
+        # Sub-test 1: Customers -> Invoices
+        cb("Navigating sub-menu: Customers -> Invoices")
+        sub1_ok = navigate_submenus(page, [
+            ["Customers", "ลูกค้า"],
+            ["Invoices", "ใบแจ้งหนี้", "การจัดทำใบแจ้งหนี้"]
+        ], frame_cb=frame_cb)
+
+        if not sub1_ok:
+            cb("Create check failed: Sub-menu Customers -> Invoices not found")
+            return ("Failed", f"Sub-menu Customers -> Invoices not found in {app_name} for role {role}")
+
+        create_btn1 = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
+        if not create_btn1.is_visible(timeout=3000):
+            cb("Create check failed: New/สร้าง button not found in Invoices page")
+            return ("Failed", f"New/สร้าง button not found in Invoices page for role {role}")
+
+        cb("Clicking New/สร้าง on Invoices page")
+        create_btn1.click()
+        time.sleep(2)
+
+        inv_num = ""
+        try:
+            cb("Filling Customer dropdown")
+            cust_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id']").first
+            if cust_inp.is_visible(timeout=2000):
+                cust_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(1)
+
+            save_btn1 = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+            if save_btn1.is_visible(timeout=2000):
+                save_btn1.click()
+                time.sleep(2)
+
+            confirm_btn1 = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button.btn-primary").first
+            if confirm_btn1.is_visible(timeout=2000):
+                confirm_btn1.click()
+                time.sleep(2)
+
+            for sel in [".o_last_breadcrumb_item", ".breadcrumb-item.active"]:
+                elem = page.locator(sel).first
+                if elem.is_visible(timeout=1000):
+                    txt = elem.inner_text().strip().split("\n")[0]
+                    if txt and txt not in ["New", "สร้าง", "Draft"]:
+                        inv_num = txt
+                        break
+        except Exception as e:
+            cb(f"Sub-test 1 (Invoices) error: {e}")
+
+        # Sub-test 2: Vendors -> Bills
+        cb("Navigating sub-menu: Vendors -> Bills")
+        sub2_ok = navigate_submenus(page, [
+            ["Vendors", "ผู้ขาย"],
+            ["Bills", "ใบแจ้งหนี้/ใบกำกับภาษี", "การบันทึกตั้งหนี้"]
+        ], frame_cb=frame_cb)
+
+        if not sub2_ok:
+            cb("Create check failed: Sub-menu Vendors -> Bills not found")
+            return ("Failed", f"Sub-menu Vendors -> Bills not found in {app_name} for role {role}")
+
+        create_btn2 = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
+        if not create_btn2.is_visible(timeout=3000):
+            cb("Create check failed: New/สร้าง button not found in Bills page")
+            return ("Failed", f"New/สร้าง button not found in Bills page for role {role}")
+
+        cb("Clicking New/สร้าง on Bills page")
+        create_btn2.click()
+        time.sleep(2)
+
+        bill_num = ""
+        try:
+            cb("Filling Vendor dropdown")
+            vendor_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id']").first
+            if vendor_inp.is_visible(timeout=2000):
+                vendor_inp.click()
+                time.sleep(0.5)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(1)
+
+            ref_str = f"REF-{random.randint(100, 999)}"
+            ref_inp = page.locator("div[name='ref'] input, input[name='ref']").first
+            if ref_inp.is_visible(timeout=1500):
+                ref_inp.fill(ref_str)
+                time.sleep(0.5)
+
+            save_btn2 = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+            if save_btn2.is_visible(timeout=2000):
+                save_btn2.click()
+                time.sleep(2)
+
+            confirm_btn2 = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button.btn-primary").first
+            if confirm_btn2.is_visible(timeout=2000):
+                confirm_btn2.click()
+                time.sleep(2)
+
+            for sel in [".o_last_breadcrumb_item", ".breadcrumb-item.active"]:
+                elem = page.locator(sel).first
+                if elem.is_visible(timeout=1000):
+                    txt = elem.inner_text().strip().split("\n")[0]
+                    if txt and txt not in ["New", "สร้าง", "Draft"]:
+                        bill_num = txt
+                        break
+        except Exception as e:
+            cb(f"Sub-test 2 (Bills) error: {e}")
+
+        # Return to Bills list view and verify
+        b_crumb = page.locator("a.breadcrumb-item:has-text('Bills'), a.breadcrumb-item:has-text('ใบแจ้งหนี้'), .breadcrumb a").first
+        if b_crumb.is_visible(timeout=2000):
+            b_crumb.click()
+        else:
+            navigate_submenus(page, [["Vendors", "ผู้ขาย"], ["Bills", "ใบแจ้งหนี้/ใบกำกับภาษี"]], frame_cb=frame_cb)
+        time.sleep(2)
+
+        target_str = bill_num if bill_num else (inv_num if inv_num else ref_str)
+        in_list = page.locator(f"table:has-text('{target_str}'), tr:has-text('{target_str}'), .o_list_table:has-text('{target_str}')").count() > 0
+
+        res_msg = f"Created Invoice '{inv_num}' and Bill '{bill_num}' successfully for role {role}"
+        if in_list or (inv_num and bill_num):
+            cb(f"Dual Create PASSED: {res_msg}")
+            return ("Passed", res_msg)
+        else:
+            cb(f"Dual Create FAILED: Could not confirm Invoice/Bill creation for role {role}")
+            return ("Failed", f"Failed to confirm dual creation (Invoice: '{inv_num}', Bill: '{bill_num}') for role {role}")
+
     # Check if sub-menu navigation is required for Request app (My Expenses -> Petty Cash / เงินสดย่อย)
-    if any(k in app_name for k in ["Request", "Expense", "ค่าใช้จ่าย"]):
+    elif any(k in app_name for k in ["Request", "Expense", "ค่าใช้จ่าย"]):
         sub_name = "Petty Cash"
         if "หัก ณ ที่จ่าย" in func_name or "Withholding" in func_name:
             sub_name = "เงินสดย่อย (หัก ณ ที่จ่าย)"
