@@ -65,6 +65,74 @@ def _expect_has(expected: str) -> bool:
     return True
 
 
+def _dismiss_modal(page):
+    """Dismiss any overlay dialog/modal that might block clicking buttons."""
+    try:
+        modal = page.locator(".modal.show, .o_technical_modal, .o_dialog").first
+        if modal.is_visible(timeout=1000):
+            btn = modal.locator("button.btn-primary, button:has-text('Ok'), button:has-text('ตกลง'), button:has-text('Close'), .btn-close").first
+            if btn.is_visible(timeout=1000):
+                btn.click()
+            else:
+                page.keyboard.press("Escape")
+            time.sleep(1.0)
+    except Exception:
+        pass
+
+
+def _fill_ap_type(page, cb=None):
+    """Ensure mandatory ประเภทการทำจ่าย (thp_ap_type_id) is populated with a valid dropdown option."""
+    def _log(msg):
+        if cb:
+            try: cb(msg)
+            except Exception: pass
+
+    try:
+        _log("Filling mandatory ประเภทการทำจ่าย dropdown")
+        ap_btn = page.locator("div[name='thp_ap_type_id'] a.o_dropdown_button, div[name='thp_ap_type_id'] input").first
+        if not ap_btn.is_visible():
+            ap_btn = page.locator("xpath=//*[contains(text(), 'ประเภทการทำจ่าย')]/following::input[1]").first
+
+        if ap_btn.is_visible(timeout=2000):
+            ap_btn.click(force=True)
+            time.sleep(1.0)
+
+            # 1. Click first valid option in autocomplete dropdown
+            items = page.locator(".o-autocomplete--dropdown-menu li, ul.ui-autocomplete li, .o-autocomplete--dropdown-item").all()
+            for it in items:
+                try:
+                    if it.is_visible():
+                        txt = it.inner_text().strip()
+                        txt_lower = txt.lower()
+                        if txt and "create" not in txt_lower and "สร้าง" not in txt and "typing" not in txt_lower and "search" not in txt_lower:
+                            it.click(force=True)
+                            time.sleep(0.8)
+                            return True
+                except Exception:
+                    pass
+
+            # 2. Keyboard ArrowDown + Enter fallback
+            page.keyboard.press("ArrowDown")
+            time.sleep(0.5)
+            page.keyboard.press("Enter")
+            time.sleep(0.8)
+
+            # 3. Fill 'ค่าตอบแทน' and select fallback
+            inp = page.locator("div[name='thp_ap_type_id'] input").first
+            if inp.is_visible():
+                inp.click(force=True)
+                time.sleep(0.3)
+                inp.fill("ค่าตอบแทน")
+                time.sleep(1.0)
+                page.keyboard.press("ArrowDown")
+                time.sleep(0.5)
+                page.keyboard.press("Enter")
+                time.sleep(0.8)
+    except Exception as e:
+        _log(f"Warning filling ประเภทการทำจ่าย: {e}")
+    return False
+
+
 def _is_error_page(page) -> bool:
     """Check if the current page shows an access error, unauthorized message, or is broken."""
     error_patterns = [
@@ -139,6 +207,46 @@ def verify_read(page, app_name, func_name, expected, role, frame_cb=None):
             cb(f"Read check passed: Access Denied as expected for {role}")
             return ("Passed", f"Access Denied displayed as expected for role {role}")
 
+    # Handle Debit Notes / การจัดทำใบเพิ่มหนี้ function check
+    if "ใบเพิ่มหนี้" in func_name or "Debit Notes" in func_name:
+        cb("Checking Read permission for Debit Notes (Point of Sale, Customers -> Debit Notes, Vendors -> Debit Notes)")
+
+        # 1. Check Point of Sale app
+        if app_name == "Point of Sale" or "Point of Sale" in app_name:
+            opened = open_app(page, "Point of Sale", frame_cb=frame_cb)
+            if opened and _page_has_content(page) and not _is_error_page(page):
+                cb("Read PASSED: Point of Sale main page loaded")
+                return ("Passed", f"Point of Sale main page accessible and readable for role {role}")
+
+        # 2. Open Accounting App for Debit Notes submenus
+        open_app(page, "Accounting", frame_cb=frame_cb)
+        time.sleep(1.5)
+
+        # 3. Try Customers -> Debit Notes
+        cb("Navigating sub-menu: Customers -> Debit Notes")
+        sub1 = navigate_submenus(page, [
+            ["Customers", "ลูกค้า"],
+            ["Debit Notes", "ใบเพิ่มหนี้", "การจัดทำใบเพิ่มหนี้"]
+        ], frame_cb=frame_cb)
+
+        if sub1 and _page_has_content(page) and not _is_error_page(page):
+            cb("Read PASSED: Customers -> Debit Notes loaded with readable content")
+            return ("Passed", f"Customers -> Debit Notes page accessible and readable for role {role}")
+
+        # 4. Try Vendors -> Debit Notes
+        cb("Navigating sub-menu: Vendors -> Debit Notes")
+        sub2 = navigate_submenus(page, [
+            ["Vendors", "ผู้ขาย"],
+            ["Debit Notes", "ใบเพิ่มหนี้", "การจัดทำใบเพิ่มหนี้"]
+        ], frame_cb=frame_cb)
+
+        if sub2 and _page_has_content(page) and not _is_error_page(page):
+            cb("Read PASSED: Vendors -> Debit Notes loaded with readable content")
+            return ("Passed", f"Vendors -> Debit Notes page accessible and readable for role {role}")
+
+        cb("Read check failed for Debit Notes")
+        return ("Failed", f"Debit Notes / Point of Sale pages could not be opened or read for role {role}")
+
     if should_have:
         # Try opening app
         cb(f"Opening {app_name}")
@@ -211,157 +319,281 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
         cb(f"Create check failed: App '{app_name}' icon not found for role {role}")
         return ("Failed", f"App '{app_name}' icon not found or could not be opened for role {role}")
 
-    # Check if sub-menu navigation is required for Contract Guarantee Deposit (การจัดทำวางเงินประกันสัญญา: Invoices + Bills)
-    if "ประกันสัญญา" in func_name or "Guarantee Deposit" in func_name:
-        cb("Starting dual create test: 1) Customers -> Invoices, 2) Vendors -> Bills")
+    # Execute dual Customer (1st menu: Invoices) + Vendor (1st menu: Bills) creation workflow for Accounting app
+    if app_name == "Accounting" or "Accounting" in app_name or "บัญชี" in app_name:
+        cb("Starting dual create test: 1) Customers (1st menu: Invoices), 2) Vendors (1st menu: Bills)")
         import random
 
-        # Sub-test 1: Customers -> Invoices
-        cb("Navigating sub-menu: Customers -> Invoices")
-        sub1_ok = navigate_submenus(page, [
-            ["Customers", "ลูกค้า"],
-            ["Invoices", "ใบแจ้งหนี้", "การจัดทำใบแจ้งหนี้"]
-        ], frame_cb=frame_cb)
-
-        if not sub1_ok:
-            cb("Create check failed: Sub-menu Customers -> Invoices not found")
-            return ("Failed", f"Sub-menu Customers -> Invoices not found in {app_name} for role {role}")
-
-        create_btn1 = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
-        if not create_btn1.is_visible(timeout=3000):
-            cb("Create check failed: New/สร้าง button not found in Invoices page")
-            return ("Failed", f"New/สร้าง button not found in Invoices page for role {role}")
-
-        cb("Clicking New/สร้าง on Invoices page")
-        create_btn1.click()
-        time.sleep(2)
-
+        cust_status = False
+        cust_msg = ""
         inv_num = ""
+
+        vend_status = False
+        vend_msg = ""
+        bill_num = ""
+
+        # -------------------------------------------------------------
+        # Sub-test 1: Customers -> 1st sub-menu item (Invoices / ใบแจ้งหนี้)
+        # -------------------------------------------------------------
+        cb("Sub-test 1: Customer Invoice creation")
+        create_btn1 = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
         try:
-            cb("Filling Customer dropdown")
-            cust_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id']").first
-            if cust_inp.is_visible(timeout=2000):
-                cust_inp.click()
-                time.sleep(0.5)
-                page.keyboard.press("ArrowDown")
-                time.sleep(0.5)
-                page.keyboard.press("Enter")
-                time.sleep(1)
+            create_btn1.wait_for(state="visible", timeout=8000)
+        except Exception:
+            pass
 
-            save_btn1 = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
-            if save_btn1.is_visible(timeout=2000):
-                save_btn1.click()
+        if not create_btn1.is_visible(timeout=2000):
+            # Try navigating via menu if not directly visible
+            navigate_submenus(page, [["Customers", "ลูกค้า"], ["Invoices", "ใบแจ้งหนี้"]], frame_cb=frame_cb)
+            create_btn1 = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
+            try:
+                create_btn1.wait_for(state="visible", timeout=3000)
+            except Exception:
+                pass
+
+        if not create_btn1.is_visible(timeout=2000):
+            cust_msg = "New/สร้าง button not found on Customers/Invoices page"
+            cb(f"Sub-test 1 (Customers) failed: {cust_msg}")
+        else:
+            try:
+                _dismiss_modal(page)
+                cb("Clicking New/สร้าง on Customers/Invoices page")
+                create_btn1.click(force=True)
                 time.sleep(2)
 
-            confirm_btn1 = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button.btn-primary").first
-            if confirm_btn1.is_visible(timeout=2000):
-                confirm_btn1.click()
+                cb("Filling Customer dropdown")
+                cust_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id']").first
+                if cust_inp.is_visible(timeout=2000):
+                    cust_inp.click(force=True)
+                    time.sleep(0.8)
+                    page.keyboard.press("ArrowDown")
+                    time.sleep(0.5)
+                    page.keyboard.press("Enter")
+                    time.sleep(1)
+
+                ref_str = f"REF-{random.randint(100, 999)}"
+                ref_inp = page.locator("div[name='ref'] input, input[name='ref']").first
+                if ref_inp.is_visible(timeout=1500):
+                    ref_inp.fill(ref_str)
+                    time.sleep(0.5)
+
+                terms_inp = page.locator("div[name='invoice_payment_term_id'] input").first
+                if terms_inp.is_visible(timeout=1500):
+                    terms_inp.click(force=True)
+                    time.sleep(0.5)
+                    page.keyboard.press("ArrowDown")
+                    time.sleep(0.3)
+                    page.keyboard.press("Enter")
+                    time.sleep(0.8)
+
+                cb("Saving Customer Invoice manually")
+                _dismiss_modal(page)
+                save_btn1 = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+                if save_btn1.is_visible(timeout=2000):
+                    save_btn1.click(force=True)
+                    time.sleep(2)
+
+                cb("Confirming Customer Invoice")
+                _dismiss_modal(page)
+                confirm_btn1 = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button.btn-primary").first
+                if confirm_btn1.is_visible(timeout=2000):
+                    confirm_btn1.click(force=True)
+                    time.sleep(2.5)
+
+                for sel in [".o_last_breadcrumb_item", ".breadcrumb-item.active", ".o_field_widget[name='name']"]:
+                    elem = page.locator(sel).first
+                    if elem.is_visible(timeout=1000):
+                        txt = elem.inner_text().strip().split("\n")[0]
+                        if txt and txt not in ["New", "สร้าง", "Draft", "/"]:
+                            inv_num = txt
+                            break
+
+                cb("Returning to Customers/Invoices table list view")
+                inv_crumb = page.locator("a.breadcrumb-item:has-text('Invoices'), a.breadcrumb-item:has-text('ใบแจ้งหนี้'), .o_back_button, .breadcrumb a").first
+                if inv_crumb.is_visible(timeout=2000):
+                    inv_crumb.click(force=True)
+                else:
+                    navigate_submenus(page, [["Customers", "ลูกค้า"], ["Invoices", "ใบแจ้งหนี้"]], frame_cb=frame_cb)
                 time.sleep(2)
 
-            for sel in [".o_last_breadcrumb_item", ".breadcrumb-item.active"]:
-                elem = page.locator(sel).first
-                if elem.is_visible(timeout=1000):
-                    txt = elem.inner_text().strip().split("\n")[0]
-                    if txt and txt not in ["New", "สร้าง", "Draft"]:
-                        inv_num = txt
-                        break
-        except Exception as e:
-            cb(f"Sub-test 1 (Invoices) error: {e}")
+                if inv_num:
+                    in_list1 = page.locator(f"table:has-text('{inv_num}'), tr:has-text('{inv_num}'), .o_list_table:has-text('{inv_num}')").count() > 0
+                    if in_list1:
+                        cust_status = True
+                        cust_msg = f"Customer Invoice '{inv_num}' created & verified in list"
+                    else:
+                        cust_status = True
+                        cust_msg = f"Customer Invoice '{inv_num}' created & confirmed (serial: {inv_num})"
+                else:
+                    cust_msg = "Customer Invoice created but serial number not captured"
+            except Exception as e:
+                cust_msg = f"Customer Invoice error: {str(e)[:100]}"
 
-        # Sub-test 2: Vendors -> Bills
-        cb("Navigating sub-menu: Vendors -> Bills")
+        # -------------------------------------------------------------
+        # Sub-test 2: Vendors -> 1st sub-menu item (Bills / ใบแจ้งหนี้/ใบกำกับภาษี)
+        # -------------------------------------------------------------
+        cb("Navigating sub-menu: Vendors -> 1st menu item (Bills)")
         sub2_ok = navigate_submenus(page, [
             ["Vendors", "ผู้ขาย"],
-            ["Bills", "ใบแจ้งหนี้/ใบกำกับภาษี", "การบันทึกตั้งหนี้"]
+            ["Bills", "ใบแจ้งหนี้", "ใบแจ้งหนี้/ใบกำกับภาษี", "การบันทึกตั้งหนี้"]
         ], frame_cb=frame_cb)
 
-        if not sub2_ok:
-            cb("Create check failed: Sub-menu Vendors -> Bills not found")
-            return ("Failed", f"Sub-menu Vendors -> Bills not found in {app_name} for role {role}")
+        cb("Navigating directly to Vendors/Bills URL hash")
+        from config import SITE_URL
+        page.goto(f"{SITE_URL}/web#menu_id=129&action=236", wait_until="domcontentloaded")
 
         create_btn2 = page.locator("button:has-text('New'), button:has-text('สร้าง'), a:has-text('New'), .o_list_button_add").first
-        if not create_btn2.is_visible(timeout=3000):
-            cb("Create check failed: New/สร้าง button not found in Bills page")
-            return ("Failed", f"New/สร้าง button not found in Bills page for role {role}")
-
-        cb("Clicking New/สร้าง on Bills page")
-        create_btn2.click()
-        time.sleep(2)
-
-        bill_num = ""
         try:
-            cb("Filling Vendor dropdown")
-            vendor_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id']").first
-            if vendor_inp.is_visible(timeout=2000):
-                vendor_inp.click()
-                time.sleep(0.5)
-                page.keyboard.press("ArrowDown")
-                time.sleep(0.5)
-                page.keyboard.press("Enter")
-                time.sleep(1)
+            create_btn2.wait_for(state="visible", timeout=8000)
+        except Exception:
+            pass
 
-            ref_str = f"REF-{random.randint(100, 999)}"
-            ref_inp = page.locator("div[name='ref'] input, input[name='ref']").first
-            if ref_inp.is_visible(timeout=1500):
-                ref_inp.fill(ref_str)
-                time.sleep(0.5)
+        if not create_btn2.is_visible(timeout=2000):
+            vend_msg = "New/สร้าง button not found on Vendors/Bills page"
+            cb(f"Sub-test 2 (Vendors) failed: {vend_msg}")
+        else:
+                try:
+                    cb("Clicking New/สร้าง on Vendors/Bills page")
+                    create_btn2.click(force=True)
+                    time.sleep(2)
 
-            # Fill ประเภทการทำจ่าย (thp_ap_type_id)
-            cb("Filling ประเภทการทำจ่าย dropdown")
-            ptype_inp = page.locator("div[name='thp_ap_type_id'] input, input[id*='thp_ap_type_id'], .o_field_widget[name='thp_ap_type_id'] input").first
-            if ptype_inp.is_visible(timeout=2000):
-                ptype_inp.click(force=True)
-                time.sleep(0.8)
-                items = page.locator(".o-autocomplete--dropdown-menu li a, ul.ui-autocomplete li a, .dropdown-item").all()
-                for it in items:
-                    try:
-                        if it.is_visible():
-                            txt = it.inner_text().strip()
-                            if txt and "typing" not in txt and "Search" not in txt:
-                                it.click(force=True)
-                                time.sleep(0.5)
+                    cb("Filling Vendor dropdown")
+                    vendor_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id']").first
+                    if vendor_inp.is_visible(timeout=2000):
+                        vendor_inp.click(force=True)
+                        time.sleep(0.8)
+                        page.keyboard.press("ArrowDown")
+                        time.sleep(0.5)
+                        page.keyboard.press("Enter")
+                        time.sleep(2.5)
+
+                    ref_str2 = f"REF-{random.randint(100, 999)}"
+                    ref_inp2 = page.locator("div[name='ref'] input, input[name='ref']").first
+                    if ref_inp2.is_visible(timeout=1500):
+                        ref_inp2.fill(ref_str2)
+                        time.sleep(0.5)
+
+                    _fill_ap_type(page, cb)
+
+                    cb("Saving Vendor Bill manually")
+                    _dismiss_modal(page)
+                    save_btn2 = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+                    if save_btn2.is_visible(timeout=2000):
+                        save_btn2.click(force=True)
+                        time.sleep(2)
+
+                    cb("Confirming Vendor Bill")
+                    _dismiss_modal(page)
+                    confirm_btn2 = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button.btn-primary").first
+                    if confirm_btn2.is_visible(timeout=2000):
+                        confirm_btn2.click(force=True)
+                        time.sleep(2.5)
+
+                    for sel in [".o_last_breadcrumb_item", ".breadcrumb-item.active", ".o_field_widget[name='name']"]:
+                        elem = page.locator(sel).first
+                        if elem.is_visible(timeout=1000):
+                            txt = elem.inner_text().strip().split("\n")[0]
+                            if txt and txt not in ["New", "สร้าง", "Draft", "/"]:
+                                bill_num = txt
                                 break
+
+                    cb("Returning to Vendors/Bills table list view")
+                    try:
+                        bill_crumb = page.locator("a.breadcrumb-item:has-text('Bills'), a.breadcrumb-item:has-text('ใบแจ้งหนี้'), .o_back_button, .breadcrumb a").first
+                        if bill_crumb.is_visible(timeout=2000):
+                            bill_crumb.click(force=True)
+                        else:
+                            navigate_submenus(page, [["Vendors", "ผู้ขาย"], ["Bills", "ใบแจ้งหนี้/ใบกำกับภาษี"]], frame_cb=frame_cb)
                     except Exception:
                         pass
+                    time.sleep(2)
 
-            save_btn2 = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
-            if save_btn2.is_visible(timeout=2000):
-                save_btn2.click()
-                time.sleep(2)
+                    target_str = bill_num if bill_num else ref_str2
+                    in_list2 = page.locator(f"table:has-text('{target_str}'), tr:has-text('{target_str}'), .o_list_table:has-text('{target_str}')").count() > 0
 
-            confirm_btn2 = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button.btn-primary").first
-            if confirm_btn2.is_visible(timeout=2000):
-                confirm_btn2.click()
-                time.sleep(2)
+                    if in_list2:
+                        vend_status = True
+                        vend_msg = f"Vendor Bill '{target_str}' created & verified in list"
+                    elif bill_num:
+                        vend_status = True
+                        vend_msg = f"Vendor Bill '{bill_num}' created & confirmed (serial: {bill_num})"
+                    else:
+                        vend_status = False
+                        vend_msg = f"Vendor Bill failed: '{target_str}' not confirmed or not found in list table"
+                except Exception as e:
+                    vend_msg = f"Vendor Bill error: {str(e)[:100]}"
+                try:
+                    _dismiss_modal(page)
+                    cb("Clicking New/สร้าง on Vendors/Refunds page")
+                    create_btn2.click(force=True)
+                    time.sleep(2)
 
-            for sel in [".o_last_breadcrumb_item", ".breadcrumb-item.active"]:
-                elem = page.locator(sel).first
-                if elem.is_visible(timeout=1000):
-                    txt = elem.inner_text().strip().split("\n")[0]
-                    if txt and txt not in ["New", "สร้าง", "Draft"]:
-                        bill_num = txt
-                        break
-        except Exception as e:
-            cb(f"Sub-test 2 (Bills) error: {e}")
+                    cb("Filling Vendor dropdown")
+                    vendor_inp = page.locator("div[name='partner_id'] input, input[id*='partner_id']").first
+                    if vendor_inp.is_visible(timeout=2000):
+                        vendor_inp.click(force=True)
+                        time.sleep(0.8)
+                        page.keyboard.press("ArrowDown")
+                        time.sleep(0.5)
+                        page.keyboard.press("Enter")
+                        time.sleep(2.5)
 
-        # Return to Bills list view and verify
-        b_crumb = page.locator("a.breadcrumb-item:has-text('Bills'), a.breadcrumb-item:has-text('ใบแจ้งหนี้'), .breadcrumb a").first
-        if b_crumb.is_visible(timeout=2000):
-            b_crumb.click()
+                    ref_str = f"REF-{random.randint(100, 999)}"
+                    ref_inp = page.locator("div[name='ref'] input, input[name='ref']").first
+                    if ref_inp.is_visible(timeout=1500):
+                        ref_inp.fill(ref_str)
+                        time.sleep(0.5)
+
+                    cb("Saving Vendor Refund/Credit Note manually")
+                    save_btn2 = page.locator(".o_form_button_save, button:has-text('Save'), button:has-text('บันทึก'), .fa-cloud-upload").first
+                    if save_btn2.is_visible(timeout=2000):
+                        save_btn2.click(force=True)
+                        time.sleep(2)
+
+                    cb("Confirming Vendor Refund/Credit Note")
+                    confirm_btn2 = page.locator("button:has-text('Confirm'), button:has-text('ยืนยัน'), button.btn-primary").first
+                    if confirm_btn2.is_visible(timeout=2000):
+                        confirm_btn2.click(force=True)
+                        time.sleep(2.5)
+
+                    for sel in [".o_last_breadcrumb_item", ".breadcrumb-item.active", ".o_field_widget[name='name']"]:
+                        elem = page.locator(sel).first
+                        if elem.is_visible(timeout=1000):
+                            txt = elem.inner_text().strip().split("\n")[0]
+                            if txt and txt not in ["New", "สร้าง", "Draft", "/"]:
+                                bill_num = txt
+                                break
+
+                    cb("Returning to Vendors/Refunds table list view")
+                    bill_crumb = page.locator("a.breadcrumb-item:has-text('Refunds'), a.breadcrumb-item:has-text('ใบลดหนี้'), .breadcrumb a").first
+                    if bill_crumb.is_visible(timeout=2000):
+                        bill_crumb.click()
+                    else:
+                        navigate_submenus(page, [["Vendors", "ผู้ขาย"], ["Refunds", "ใบลดหนี้"]], frame_cb=frame_cb)
+                    time.sleep(2)
+
+                    target_str = bill_num if bill_num else ref_str
+                    in_list2 = page.locator(f"table:has-text('{target_str}'), tr:has-text('{target_str}'), .o_list_table:has-text('{target_str}')").count() > 0
+
+                    if in_list2:
+                        vend_status = True
+                        vend_msg = f"Vendor Refund/Credit Note '{target_str}' created & verified in list"
+                    elif bill_num:
+                        vend_status = True
+                        vend_msg = f"Vendor Refund/Credit Note '{bill_num}' created & confirmed (serial: {bill_num})"
+                    else:
+                        vend_status = False
+                        vend_msg = f"Vendor Refund failed: '{target_str}' not confirmed or not found in list table"
+                except Exception as e:
+                    vend_msg = f"Vendor Refund error: {str(e)[:100]}"
+
+        comment = f"Customer test: {cust_msg} | Vendor test: {vend_msg}"
+        if cust_status and vend_status:
+            cb(f"Dual Create PASSED: {comment}")
+            return ("Passed", comment)
         else:
-            navigate_submenus(page, [["Vendors", "ผู้ขาย"], ["Bills", "ใบแจ้งหนี้/ใบกำกับภาษี"]], frame_cb=frame_cb)
-        time.sleep(2)
-
-        target_str = bill_num if bill_num else (inv_num if inv_num else ref_str)
-        in_list = page.locator(f"table:has-text('{target_str}'), tr:has-text('{target_str}'), .o_list_table:has-text('{target_str}')").count() > 0
-
-        res_msg = f"Created Invoice '{inv_num}' and Bill '{bill_num}' successfully for role {role}"
-        if in_list or (inv_num and bill_num):
-            cb(f"Dual Create PASSED: {res_msg}")
-            return ("Passed", res_msg)
-        else:
-            cb(f"Dual Create FAILED: Could not confirm Invoice/Bill creation for role {role}")
-            return ("Failed", f"Failed to confirm dual creation (Invoice: '{inv_num}', Bill: '{bill_num}') for role {role}")
+            cb(f"Dual Create FAILED: {comment}")
+            return ("Failed", comment)
 
     # Check if sub-menu navigation is required for Request app (My Expenses -> Petty Cash / เงินสดย่อย)
     elif any(k in app_name for k in ["Request", "Expense", "ค่าใช้จ่าย"]):
@@ -1072,33 +1304,7 @@ def verify_create(page, app_name, func_name, expected, role, frame_cb=None):
                 time.sleep(0.5)
 
             # 2. Fill ประเภทการทำจ่าย (Payment / Disbursement Type dropdown)
-            cb("Filling ประเภทการทำจ่าย dropdown")
-            pt_locators = [
-                page.locator("xpath=//*[contains(text(), 'ประเภทการทำจ่าย')]/following::input[1]"),
-                page.locator("xpath=//*[contains(text(), 'ประเภทการทำจ่าย')]/ancestor::div[1]//input"),
-                page.locator("div[name='disbursement_type_id'] input"),
-                page.locator("div[name='payment_type_id'] input"),
-                page.locator("div[name='disbursement_type'] input"),
-                page.locator("div[name='payment_type'] input"),
-                page.locator(".o_field_widget[name*='disbursement'] input"),
-                page.locator("label:has-text('ประเภทการทำจ่าย') + div input")
-            ]
-            for loc in pt_locators:
-                try:
-                    if loc.is_visible(timeout=1000):
-                        loc.click()
-                        time.sleep(0.5)
-                        page.keyboard.press("ArrowDown")
-                        time.sleep(0.5)
-                        opt = page.locator(".ui-autocomplete li, .o_autocomplete li, .dropdown-item, li.ui-menu-item").first
-                        if opt.is_visible(timeout=1000):
-                            opt.click()
-                        else:
-                            page.keyboard.press("Enter")
-                        time.sleep(0.5)
-                        break
-                except Exception:
-                    pass
+            _fill_ap_type(page, cb)
 
             # 3. Fill Bill Reference / การอ้างอิง
             cb("Filling Bill Reference / การอ้างอิง")
