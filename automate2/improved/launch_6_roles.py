@@ -34,19 +34,19 @@ BRANCH_ROLES = [
     "Outsource"
 ]
 
-def login_tab(page, role: str):
+def login_tab(page, role: str, db_code: str = "13000"):
     """Log in role inside given tab and leave at home page."""
     cred = ROLE_CREDENTIALS.get(role)
     if not cred:
         raise ValueError(f"No credentials configured for role: {role}")
 
-    print(f"[{role}] Opening database selector...")
+    print(f"[{role}] Opening database selector for DB {db_code}...")
     page.goto(SELECTOR_URL, wait_until="domcontentloaded")
     time.sleep(1.5)
 
-    # Click 13000 DB
+    # Click specified DB code (e.g. 13000 or 13140)
     for _ in range(5):
-        db = page.get_by_text(DATABASE_CODE, exact=True)
+        db = page.get_by_text(db_code, exact=True)
         if db.count() > 0 and db.first.is_visible():
             db.first.click()
             time.sleep(1.5)
@@ -108,11 +108,12 @@ def login_tab(page, role: str):
 def main():
     parser = argparse.ArgumentParser(description="Launch 6 role browser tabs")
     parser.add_argument("--env", choices=["HQ", "Branch"], default="Branch", help="Target environment link (HQ or Branch)")
+    parser.add_argument("--db", default="13000", help="Target Database Code (e.g. 13000, 13140)")
     args = parser.parse_args()
 
     roles = HQ_ROLES if args.env == "HQ" else BRANCH_ROLES
     print(f"\n========================================================")
-    print(f"  Launching 6 Browser Tabs for Environment: {args.env}")
+    print(f"  Launching 6 Browser Tabs for Environment: {args.env}, DB: {args.db}")
     print(f"========================================================\n")
 
     p = sync_playwright().start()
@@ -127,9 +128,9 @@ def main():
 
     # Log in each role sequentially in its isolated tab context
     for idx, (role, ctx, page) in enumerate(tabs):
-        print(f"\n[{idx+1}/6] Logging in role: '{role}'...")
+        print(f"\n[{idx+1}/6] Logging in role: '{role}' on DB {args.db}...")
         try:
-            login_tab(page, role)
+            login_tab(page, role, db_code=args.db)
         except Exception as e:
             print(f"[{role}] Failed to log in: {e}")
 
