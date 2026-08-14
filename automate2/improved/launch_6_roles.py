@@ -116,13 +116,13 @@ def main():
     print(f"========================================================\n")
 
     p = sync_playwright().start()
-    browser = p.chromium.launch(headless=False, args=["--start-maximized"])
-    context = browser.new_context(viewport=None)
+    browser = p.chromium.launch(headless=False)
+    context = browser.new_context(viewport={"width": 1400, "height": 900})
 
     # Create 6 tabs inside single browser window
     pages = []
-    for idx, role in enumerate(roles):
-        page = context.new_page() if idx > 0 else context.pages[0]
+    for role in roles:
+        page = context.new_page()
         pages.append((role, page))
 
     # Log in each role sequentially in its tab
@@ -134,17 +134,19 @@ def main():
             print(f"[{role}] Failed to log in: {e}")
 
     print("\n========================================================")
-    print("  ALL 6 TABS LOGGED IN AND AT HOME PAGE")
-    print("  Press CTRL+C in this console when done to close browser.")
+    print("  ALL 6 TABS LOGGED IN AND READY FOR MANUAL TESTING!")
+    print("  Keep this command window open to keep browser tabs open.")
     print("========================================================\n")
 
     try:
         while True:
             time.sleep(1)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         print("Closing browser...")
-        browser.close()
-        p.stop()
+        try: browser.close()
+        except Exception: pass
+        try: p.stop()
+        except Exception: pass
 
 if __name__ == "__main__":
     main()
