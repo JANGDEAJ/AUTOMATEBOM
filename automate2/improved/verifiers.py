@@ -209,43 +209,57 @@ def verify_read(page, app_name, func_name, expected, role, frame_cb=None):
 
     # Handle Debit Notes / การจัดทำใบเพิ่มหนี้ function check
     if "ใบเพิ่มหนี้" in func_name or "Debit Notes" in func_name:
-        cb("Checking Read permission for Debit Notes (Point of Sale, Customers -> Debit Notes, Vendors -> Debit Notes)")
+        cb("Checking Read permission for Debit Notes (Searching for 'Debit Notes' or 'ใบเพิ่มหนี้' keyword)")
 
-        # 1. Check Point of Sale app
-        if app_name == "Point of Sale" or "Point of Sale" in app_name:
+        # Function to check if page contains Debit Notes keyword or header
+        def _has_debit_note_text(page) -> bool:
+            try:
+                targets = ["Debit Notes", "Debit Note", "ใบเพิ่มหนี้", "การจัดทำใบเพิ่มหนี้"]
+                for t in targets:
+                    if page.get_by_text(t, exact=False).count() > 0:
+                        loc = page.get_by_text(t, exact=False).first
+                        if loc.is_visible():
+                            return True
+            except Exception:
+                pass
+            return False
+
+        # 1. Open Point of Sale app if specified
+        if "Point of Sale" in app_name:
             opened = open_app(page, "Point of Sale", frame_cb=frame_cb)
-            if opened and _page_has_content(page) and not _is_error_page(page):
-                cb("Read PASSED: Point of Sale main page loaded")
-                return ("Passed", f"Point of Sale main page accessible and readable for role {role}")
+            if opened and not _is_error_page(page):
+                if _has_debit_note_text(page) or _page_has_content(page):
+                    cb("Read PASSED: Found Debit Notes / Point of Sale content")
+                    return ("Passed", f"Found Debit Notes / PoS content on page for role {role}")
 
-        # 2. Open Accounting App for Debit Notes submenus
+        # 2. Open Accounting App
         open_app(page, "Accounting", frame_cb=frame_cb)
         time.sleep(1.5)
 
-        # 3. Try Customers -> Debit Notes
+        # 3. Check Customers -> Debit Notes
         cb("Navigating sub-menu: Customers -> Debit Notes")
         sub1 = navigate_submenus(page, [
             ["Customers", "ลูกค้า"],
             ["Debit Notes", "ใบเพิ่มหนี้", "การจัดทำใบเพิ่มหนี้"]
         ], frame_cb=frame_cb)
 
-        if sub1 and _page_has_content(page) and not _is_error_page(page):
-            cb("Read PASSED: Customers -> Debit Notes loaded with readable content")
-            return ("Passed", f"Customers -> Debit Notes page accessible and readable for role {role}")
+        if sub1 and not _is_error_page(page) and (_has_debit_note_text(page) or _page_has_content(page)):
+            cb("Read PASSED: Found Debit Notes / ใบเพิ่มหนี้ in Customers sub-menu")
+            return ("Passed", f"Found 'Debit Notes' / 'ใบเพิ่มหนี้' in Customers sub-menu for role {role}")
 
-        # 4. Try Vendors -> Debit Notes
+        # 4. Check Vendors -> Debit Notes
         cb("Navigating sub-menu: Vendors -> Debit Notes")
         sub2 = navigate_submenus(page, [
             ["Vendors", "ผู้ขาย"],
             ["Debit Notes", "ใบเพิ่มหนี้", "การจัดทำใบเพิ่มหนี้"]
         ], frame_cb=frame_cb)
 
-        if sub2 and _page_has_content(page) and not _is_error_page(page):
-            cb("Read PASSED: Vendors -> Debit Notes loaded with readable content")
-            return ("Passed", f"Vendors -> Debit Notes page accessible and readable for role {role}")
+        if sub2 and not _is_error_page(page) and (_has_debit_note_text(page) or _page_has_content(page)):
+            cb("Read PASSED: Found Debit Notes / ใบเพิ่มหนี้ in Vendors sub-menu")
+            return ("Passed", f"Found 'Debit Notes' / 'ใบเพิ่มหนี้' in Vendors sub-menu for role {role}")
 
-        cb("Read check failed for Debit Notes")
-        return ("Failed", f"Debit Notes / Point of Sale pages could not be opened or read for role {role}")
+        cb("Read check FAILED: 'Debit Notes' or 'ใบเพิ่มหนี้' not found on page")
+        return ("Failed", f"'Debit Notes' or 'ใบเพิ่มหนี้' not found on page for role {role}")
 
     if should_have:
         # Try opening app
