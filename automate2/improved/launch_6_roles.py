@@ -117,16 +117,16 @@ def main():
 
     p = sync_playwright().start()
     browser = p.chromium.launch(headless=False)
-    context = browser.new_context(viewport={"width": 1400, "height": 900})
 
-    # Create 6 tabs inside single browser window
-    pages = []
+    # Create isolated browser context per role so sessions don't overwrite each other
+    tabs = []
     for role in roles:
-        page = context.new_page()
-        pages.append((role, page))
+        ctx = browser.new_context(viewport={"width": 1400, "height": 900})
+        page = ctx.new_page()
+        tabs.append((role, ctx, page))
 
-    # Log in each role sequentially in its tab
-    for idx, (role, page) in enumerate(pages):
+    # Log in each role sequentially in its isolated tab context
+    for idx, (role, ctx, page) in enumerate(tabs):
         print(f"\n[{idx+1}/6] Logging in role: '{role}'...")
         try:
             login_tab(page, role)
@@ -134,8 +134,8 @@ def main():
             print(f"[{role}] Failed to log in: {e}")
 
     print("\n========================================================")
-    print("  ALL 6 TABS LOGGED IN AND READY FOR MANUAL TESTING!")
-    print("  Keep this command window open to keep browser tabs open.")
+    print("  ALL 6 TABS LOGGED IN WITH 6 SEPARATE ROLE SESSIONS!")
+    print("  Keep this command window open to keep browser open.")
     print("========================================================\n")
 
     try:
